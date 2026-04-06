@@ -1,0 +1,293 @@
+EnumType,Code,Description
+MessageTypeEnumType,GIR,GIR
+MessageTypeIndicEnumType,GIR101,The message contains new information
+MessageTypeIndicEnumType,GIR102,The message contains corrections for previously sent information
+MessageTypeIndicEnumType,GIR103,The message advises there is no data to report
+IdTypeRulesEnumType,GIR201,QIIR applicable to Low-Taxed Constituent Entities located in other jurisdictions only
+IdTypeRulesEnumType,GIR202,QIIR applicable to both Low-Taxed Constituent Entities located in other jurisdictions and in the jurisdiction of the Parent Entity
+IdTypeRulesEnumType,GIR203,QUTPR
+IdTypeRulesEnumType,GIR204,QDMTT
+IdTypeRulesEnumType,GIR205,Not applicable
+IdTypeGloBeStatusEnumType,GIR301,Constituent Entity
+IdTypeGloBeStatusEnumType,GIR302,Flow-Through Entity - Tax Transparent
+IdTypeGloBeStatusEnumType,GIR303,Flow-Through Entity - Reverse Hybrid
+IdTypeGloBeStatusEnumType,GIR304,Hybrid Entity
+IdTypeGloBeStatusEnumType,GIR305,Permanent Establishment
+IdTypeGloBeStatusEnumType,GIR306,Main Entity
+IdTypeGloBeStatusEnumType,GIR307,Minority-Owned Parent Entity
+IdTypeGloBeStatusEnumType,GIR308,Minority-Owned Subsidiary
+IdTypeGloBeStatusEnumType,GIR309,Minority-Owned Constituent Entity
+IdTypeGloBeStatusEnumType,GIR310,Investment Entity
+IdTypeGloBeStatusEnumType,GIR311,Insurance Investment Entity
+IdTypeGloBeStatusEnumType,GIR312,Securitisation Entity
+IdTypeGloBeStatusEnumType,GIR313,JV
+IdTypeGloBeStatusEnumType,GIR314,JV Subsidiary
+IdTypeGloBeStatusEnumType,GIR315,Non-Material Constituent Entity
+IdTypeGloBeStatusEnumType,GIR316,Excluded Entity
+IdTypeGloBeStatusEnumType,GIR317,Parent Entity required to apply a QIIR under Article 10.3.5
+IdTypeGloBeStatusEnumType,GIR318,Non-group Member
+FilingCeRoleEnumType,GIR401,Ultimate Parent Entity
+FilingCeRoleEnumType,GIR402,Designated Filing Entity
+FilingCeRoleEnumType,GIR403,Designated Local Entity
+FilingCeRoleEnumType,GIR404,Constituent Entity
+FilingCeRoleEnumType,GIR405,Other
+FilingCeCofUpeEnumType,GIR501,Subparagraph a
+FilingCeCofUpeEnumType,GIR502,Subparagraph b
+FilingCeCofUpeEnumType,GIR503,Subparagraph c
+FilingCeCofUpeEnumType,GIR504,Subparagraph d
+ExcludedUpeEnumType,GIR601,Governmental Entity
+ExcludedUpeEnumType,GIR602,International Organisation
+ExcludedUpeEnumType,GIR603,Non-profit Organisation
+ExcludedUpeEnumType,GIR604,Pension Fund
+ExcludedUpeEnumType,GIR605,Investment Fund that is an UPE
+ExcludedUpeEnumType,GIR606,Real Estate Investment Vehicle that is an UPE
+IdGlobeStatusEnumType,GIR701,Constituent Entity
+IdGlobeStatusEnumType,GIR702,Flow-Through Entity - Tax Transparent
+IdGlobeStatusEnumType,GIR703,Flow-Through Entity - Reverse Hybrid
+IdGlobeStatusEnumType,GIR704,Hybrid Entity
+IdGlobeStatusEnumType,GIR705,Permanent Establishment
+IdGlobeStatusEnumType,GIR706,Main Entity
+IdGlobeStatusEnumType,GIR707,Minority-Owned Parent Entity
+IdGlobeStatusEnumType,GIR708,Minority-Owned Subsidiary
+IdGlobeStatusEnumType,GIR709,Minority-Owned Constituent Entity
+IdGlobeStatusEnumType,GIR710,Investment Entity
+IdGlobeStatusEnumType,GIR711,Insurance Investment Entity
+IdGlobeStatusEnumType,GIR712,Securitisation Entity
+IdGlobeStatusEnumType,GIR713,JV
+IdGlobeStatusEnumType,GIR714,JV Subsidiary
+IdGlobeStatusEnumType,GIR715,Non-Material Constituent Entity
+IdGlobeStatusEnumType,GIR716,POPE
+IdGlobeStatusEnumType,GIR717,Intermediate Parent Entity
+IdGlobeStatusEnumType,GIR718,Ultimate Parent Entity
+IdGlobeStatusEnumType,GIR719,Excluded Entity
+IdGlobeStatusEnumType,GIR720,Parent Entity required to apply a QIIR under Art. 10.3.5
+IdGlobeStatusEnumType,GIR721,Non-Group member
+OwnershipTypeEnumType,GIR801,UPE
+OwnershipTypeEnumType,GIR802,Constituent Entities
+OwnershipTypeEnumType,GIR803,JVs
+OwnershipTypeEnumType,GIR804,JV Subsidiaries
+OwnershipTypeEnumType,GIR805,Excluded Entities (aggregate)
+OwnershipTypeEnumType,GIR806,Non-Group members (aggregate)
+PopeipeEnumType,GIR901,POPE
+PopeipeEnumType,GIR902,Intermediate Parent Entity
+PopeipeEnumType,GIR903,Parent Entity required to apply a QIIR under Art. 10.3.5
+ExcludedEntityEnumType,GIR1001,Governmental Entity
+ExcludedEntityEnumType,GIR1002,International Organisation
+ExcludedEntityEnumType,GIR1003,Non-profit Organisation
+ExcludedEntityEnumType,GIR1004,Pension Fund
+ExcludedEntityEnumType,GIR1005,Investment Fund that is an UPE
+ExcludedEntityEnumType,GIR1006,Real Estate Investment Vehicle that is an UPE
+ExcludedEntityEnumType,GIR1007,Entity owned by Excluded Entities under Article 1.5.2(a)
+ExcludedEntityEnumType,GIR1008,Entity owned by Excluded Entities under Article 1.5.2(b)
+TypeofSubGroupEnumType,GIR1101,Constituent Entities
+TypeofSubGroupEnumType,GIR1102,Minority-Owned Subgroup
+TypeofSubGroupEnumType,GIR1103,Standalone MOCEs
+TypeofSubGroupEnumType,GIR1104,Investment Entities
+TypeofSubGroupEnumType,GIR1105,JV Group
+TypeofSubGroupEnumType,GIR1106,Stateless Constituent Entity
+SafeHarbourEnumType,GIR1201,De minimis Exclusion
+SafeHarbourEnumType,GIR1202,QDMTT safe harbour
+SafeHarbourEnumType,GIR1203,Transitional CbCR Safe Harbour - De minimis test
+SafeHarbourEnumType,GIR1204,Transitional CbCR Safe Harbour - ETR test
+SafeHarbourEnumType,GIR1205,Transitional CbCR Safe Harbour - Routine profit test
+SafeHarbourEnumType,GIR1206,Transitional UTPR Safe Harbour
+SafeHarbourEnumType,GIR1207,Permanent Safe Harbour - De minimis test
+SafeHarbourEnumType,GIR1208,Permanent Safe Harbour - ETR test
+SafeHarbourEnumType,GIR1209,Permanent Safe Harbour - Routine profit test
+EtrRangeEnumType,GIR1301,below 2.5%
+EtrRangeEnumType,GIR1302,2.5% or above but below 5%
+EtrRangeEnumType,GIR1303,5% or above but below 7.5%
+EtrRangeEnumType,GIR1304,7.5% or above but below 10%
+EtrRangeEnumType,GIR1305,10% or above but below 12.5%
+EtrRangeEnumType,GIR1306,12.5% or above but below 15%
+EtrRangeEnumType,GIR1307,15% or above but below 17.5%
+EtrRangeEnumType,GIR1308,17.5% or above but below 20%
+EtrRangeEnumType,GIR1309,20% or above but below 22.5%
+EtrRangeEnumType,GIR1310,22.5% or above but below 25%
+EtrRangeEnumType,GIR1311,25% or above but below 27.5%
+EtrRangeEnumType,GIR1312,27.5% or above but below 30%
+EtrRangeEnumType,GIR1313,30% or above
+EtrRangeEnumType,GIR1314,Section 3.2 not completed
+QdmtTuTEnumType,GIR1401,No Top-up Tax payable
+QdmtTuTEnumType,GIR1402,below EUR 1 million
+QdmtTuTEnumType,GIR1403,EUR 1 million to below EUR 5 million
+QdmtTuTEnumType,GIR1404,EUR 5 million to below EUR 25 million
+QdmtTuTEnumType,GIR1405,EUR 25 million to below EUR 50 million
+QdmtTuTEnumType,GIR1406,EUR 50 million to below EUR 75 million
+QdmtTuTEnumType,GIR1407,EUR 75 million to below EUR 100 million
+QdmtTuTEnumType,GIR1408,EUR 100 million to below EUR 250 million
+QdmtTuTEnumType,GIR1409,EUR 250 million or above
+GlobeTuTEnumType,GIR1501,No Top-up Tax payable
+GlobeTuTEnumType,GIR1502,below EUR 1 million
+GlobeTuTEnumType,GIR1503,EUR 1 million to below EUR 5 million
+GlobeTuTEnumType,GIR1504,EUR 5 million to below EUR 25 million
+GlobeTuTEnumType,GIR1505,EUR 25 million to below EUR 50 million
+GlobeTuTEnumType,GIR1506,EUR 50 million to below EUR 75 million
+GlobeTuTEnumType,GIR1507,EUR 75 million to below EUR 100 million
+GlobeTuTEnumType,GIR1508,EUR 100 million to below EUR 250 million
+GlobeTuTEnumType,GIR1509,EUR 250 million or above
+EtrTypeofSubGroupEnumType,GIR1601,Constituent Entities
+EtrTypeofSubGroupEnumType,GIR1602,Minority-Owned Subgroup
+EtrTypeofSubGroupEnumType,GIR1603,Standalone MOCEs
+EtrTypeofSubGroupEnumType,GIR1604,Investment Entities
+EtrTypeofSubGroupEnumType,GIR1605,JV Group
+EtrTypeofSubGroupEnumType,GIR1606,Stateless Constituent Entity
+EtrTypeofSubGroupEnumType,GIR1607,Transitional CbCR Safe Harbour - Constituent Entities
+EtrTypeofSubGroupEnumType,GIR1608,Transitional CbCR Safe Harbour - JV Group
+EtrTypeofSubGroupEnumType,GIR1609,Transitional UTPR Safe Harbour
+MainEntityPEandFteBasisEnumType,GIR1701,Article 3.4
+MainEntityPEandFteBasisEnumType,GIR1702,Article 3.5.3
+MainEntityPEandFteBasisEnumType,GIR1703,Article 3.5.1(a)
+MainEntityPEandFteBasisEnumType,GIR1704,Article 3.5.1(b)
+CrossBorderAdjustmentsEnumType,GIR1801,Article 3.2.3
+CrossBorderAdjustmentsEnumType,GIR1802,Article 3.2.7
+UpeAdjustmentsBasisEnumType,GIR1901,Article 7.1.1 (a)(i)
+UpeAdjustmentsBasisEnumType,GIR1902,Article 7.1.1 (a)(ii)
+UpeAdjustmentsBasisEnumType,GIR1903,Article 7.1.1 (b)
+UpeAdjustmentsBasisEnumType,GIR1904,Article 7.1.1 (c)
+UpeAdjustmentsBasisEnumType,GIR1905,Article 7.2.1 (a)(i)
+UpeAdjustmentsBasisEnumType,GIR1906,Article 7.2.1 (a)(ii)
+UpeAdjustmentsBasisEnumType,GIR1907,Article 7.2.1 (a)(iii)
+UpeAdjustmentsBasisEnumType,GIR1908,Article 7.2.1 (b)
+UpeAdjustmentsBasisEnumType,GIR1909,Article 7.2.1 (c)
+UpeAdjustmentsBasisEnumType,GIR1910,Article 7.2.2
+UpeAdjustmentsBasisEnumType,GIR1999,Article 7.1.2
+AdjustmentItemEnumType,GIR2001,Net Taxes Expense - Article 3.2.1 (a)
+AdjustmentItemEnumType,GIR2002,Excluded Dividends - Article 3.2.1 (b)
+AdjustmentItemEnumType,GIR2003,Excluded Equity Gain or Loss - Article 3.2.1 (c)
+AdjustmentItemEnumType,GIR2004,Included Revaluation Method Gain or Loss - Article 3.2.1 (d)
+AdjustmentItemEnumType,GIR2005,Gain or loss from disposition of assets and liabilities excluded under Article 6.3 - Article 3.2.1 (e)
+AdjustmentItemEnumType,GIR2006,Asymmetric Foreign Currency Gains or Losses - Article 3.2.1 (f)
+AdjustmentItemEnumType,GIR2007,Policy Disallowed Expenses - Article 3.2.1 (g)
+AdjustmentItemEnumType,GIR2008,Prior Period Errors - Article 3.2.1 (h)
+AdjustmentItemEnumType,GIR2009,Changes in Accounting Principles - Article 3.2.1 (h)
+AdjustmentItemEnumType,GIR2010,Accrued Pension Expense - Article 3.2.1 (i)
+AdjustmentItemEnumType,GIR2011,Debt releases - Article 3.2.1
+AdjustmentItemEnumType,GIR2012,Stock-based compensation - Article 3.2.2
+AdjustmentItemEnumType,GIR2013,Arm's length adjustments - Article 3.2.3
+AdjustmentItemEnumType,GIR2014,Qualified Refundable Tax Credit or Marketable Transferable Tax Credit - Article 3.2.4
+AdjustmentItemEnumType,GIR2015,Election for Gains and losses using realisation principle - Article 3.2.5
+AdjustmentItemEnumType,GIR2016,Election for Adjusted Asset Gain - Article 3.2.6
+AdjustmentItemEnumType,GIR2017,Intragroup Financing Arrangement expense - Article 3.2.7
+AdjustmentItemEnumType,GIR2018,Election for intragroup transactions in same jurisdiction - Article 3.2.8
+AdjustmentItemEnumType,GIR2019,Insurance company taxes charged to policyholders - Article 3.2.9
+AdjustmentItemEnumType,GIR2020,Increase/decrease to equity attributed to Additional Tier One and Restricted Tier One Capital distributions - Article 3.2.10
+AdjustmentItemEnumType,GIR2021,Constituent Entities joining and leaving an MNE Group - Article 3.2.11 and 6.2
+AdjustmentItemEnumType,GIR2022,Reduction of GloBE Income of the UPE that is a Flow-through Entity - Article 3.2.11 and 7.1
+AdjustmentItemEnumType,GIR2023,Reduction of GloBE Income of the UPE that is subject to a Deductible Dividend Regime - Article 3.2.11 and 7.2
+AdjustmentItemEnumType,GIR2024,Taxable Distribution Method election - Article 3.2.11 and 7.6
+AdjustmentItemEnumType,GIR2025,International Shipping Income - Article 3.3
+AdjustmentItemEnumType,GIR2026,Transactions between Constituent Entities - Article 9.1.3
+IntShipCategoryEnumType,GIR2101,Article 3.3.2.a
+IntShipCategoryEnumType,GIR2102,Article 3.3.2.b
+IntShipCategoryEnumType,GIR2103,Article 3.3.2.c
+IntShipCategoryEnumType,GIR2104,Article 3.3.2.d
+IntShipCategoryEnumType,GIR2105,Article 3.3.2.e
+IntShipCategoryEnumType,GIR2106,Article 3.3.2.f
+AncShipCategoryEnumType,GIR2201,Article 3.3.3.a
+AncShipCategoryEnumType,GIR2202,Article 3.3.3.b
+AncShipCategoryEnumType,GIR2203,Article 3.3.3.c
+AncShipCategoryEnumType,GIR2204,Article 3.3.3.d
+AncShipCategoryEnumType,GIR2205,Article 3.3.3.e
+AdjustedBasisEnumType,GIR2301,Article 4.3.2 (a)
+AdjustedBasisEnumType,GIR2302,Article 4.3.2 (b)
+AdjustedBasisEnumType,GIR2303,Article 4.3.2 (c)
+AdjustedBasisEnumType,GIR2304,Article 4.3.2 (d)
+AdjustedBasisEnumType,GIR2305,Article 4.3.2 (e)
+AdjustedBasisEnumType,GIR2306,Article 4.3.3 (a)
+AdjustedBasisEnumType,GIR2307,Article 4.3.3 (b)
+AdjustedBasisEnumType,GIR2308,Article 4.3.4
+AdjustedBasisEnumType,GIR2309,Article 4.3.2(c) - Blended CFC regime
+CurrentAdjustedTaxEnumType,GIR2401,Covered Tax accrued as an expense in the profit before taxation - Article 4.1.2 (a)
+CurrentAdjustedTaxEnumType,GIR2402,Covered Taxes for uncertain tax position recorded as a reduction to Covered Taxes in prior year - Article 4.1.2 (c)
+CurrentAdjustedTaxEnumType,GIR2403,Qualified Refundable Tax Credit or Marketable Transferable Tax Credits recorded as a reduction to current tax expense - Article 4.1.2 (d)
+CurrentAdjustedTaxEnumType,GIR2404,Qualified Flow-through Tax Benefits of Qualified Ownership Interests - Article 3.2.1 (c)
+CurrentAdjustedTaxEnumType,GIR2405,Current tax expense on income excluded from GloBE Income or Loss - Article 4.1.3 (a)
+CurrentAdjustedTaxEnumType,GIR2406,Non-Qualified Refundable Tax Credit or Other Tax Credits not recorded as a reduction to current tax expense - Article 4.1.3 (b)
+CurrentAdjustedTaxEnumType,GIR2407,Covered Taxes refunded or credited not treated as an adjustment to current tax expense - Article 4.1.3 (c)
+CurrentAdjustedTaxEnumType,GIR2408,Current tax expense related to uncertain tax position - Article 4.1.3 (d)
+CurrentAdjustedTaxEnumType,GIR2409,Current tax expense not expected to be paid within three years - Article 4.1.3 (e)
+CurrentAdjustedTaxEnumType,GIR2410,Post-filing adjustments - Article 4.6.1
+CurrentAdjustedTaxEnumType,GIR2411,Covered Taxes relating to Net Asset Gain or Net Asset Loss - Article 3.2.6
+CurrentAdjustedTaxEnumType,GIR2412,Reduction of Covered Taxes of the UPE that is a Flow-through Entity - Article 7.1
+CurrentAdjustedTaxEnumType,GIR2413,Covered Taxes for GloBE Income of the UPE reduced under a Deductible Dividend Regime - Article 7.2.2
+CurrentAdjustedTaxEnumType,GIR2414,Deemed Distribution Tax - Article 7.3
+CurrentAdjustedTaxEnumType,GIR2415,Taxable Distribution Method election - Article 7.6 (b)
+CurrentAdjustedTaxEnumType,GIR2416,Total Deferred Tax Adjustment Amount - Article 4.4.1(b)
+CurrentAdjustedTaxEnumType,GIR2417,Increase or decrease in Covered Taxes recorded in equity or OCI - Article 4.1.1 (c)
+DeferredAdjustedTaxEnumType,GIR2501,Deferred tax expense related to items excluded from GloBE Income or Loss - Article 4.4.1 (a)
+DeferredAdjustedTaxEnumType,GIR2502,Deferred tax expense related to Disallowed Accruals - Article 4.4.1 (b)
+DeferredAdjustedTaxEnumType,GIR2503,Deferred tax expense related to Unclaimed Accruals - Article 4.4.1 (b)
+DeferredAdjustedTaxEnumType,GIR2504,Valuation adjustment or accounting recognition adjustment related to a deferred tax asset - Article 4.4.1 (c)
+DeferredAdjustedTaxEnumType,GIR2505,Deferred tax expense arising from a re-measurement related to changes in the tax rate - Article 4.4.1 (d)
+DeferredAdjustedTaxEnumType,GIR2506,Deferred tax expense related to the generation and use of tax credits - Article 4.4.1 (e)
+DeferredAdjustedTaxEnumType,GIR2507,Substitute Loss Carry Forward DTA or deemed Substitute Loss Carry Forward DTA - Article 4.4.1 (e)
+DeferredAdjustedTaxEnumType,GIR2508,Disallowed Accruals or Unclaimed Accruals paid during the fiscal year - Article 4.4.2 (a)
+DeferredAdjustedTaxEnumType,GIR2509,Recapture Deferred Tax Liability paid during the fiscal year - Article 4.4.2 (b)
+DeferredAdjustedTaxEnumType,GIR2510,Recognition of a loss Deferred Tax Asset not included in the financials - Article 4.4.2 (c)
+DeferredAdjustedTaxEnumType,GIR2511,Deferred tax expense adjustment resulting from a reduction to a tax rate - Article 4.6.2
+DeferredAdjustedTaxEnumType,GIR2512,Deferred tax expense adjustment resulting from an increase to a tax rate - Article 4.6.3
+DeferredAdjustedTaxEnumType,GIR2513,Constituent Entities joining and leaving an MNE Group - Article 6.2
+DeferredAdjustedTaxEnumType,GIR2514,Deferred tax expense of the UPE that is a Flow-through Entity - Article 7.1
+DeferredAdjustedTaxEnumType,GIR2515,Deferred tax expense of the UPE that is subject to Deductible Dividend Regime - Article 7.2
+DeferredAdjustedTaxEnumType,GIR2516,Deferred tax adjustment resulting from transactions between Constituent Entities - Article 9.1.3
+NonArt415EnumType,GIR2601,Article 3.2.6
+NonArt415EnumType,GIR2602,Article 4.4.4
+NonArt415EnumType,GIR2603,Article 4.6.1
+NonArt415EnumType,GIR2604,Article 4.6.4
+NonArt415EnumType,GIR2605,Article 7.3.5
+NonArt415EnumType,GIR2606,Article 7.3.7
+FinalAdjustedTaxEnumType,GIR2701,Covered Tax accrued as an expense in the profit before taxation - Article 4.1.2 (a)
+FinalAdjustedTaxEnumType,GIR2702,GloBE Loss Deferred Tax Asset established under Article 4.5.1 or used - Article 4.1.2 (b) / 4.5.3
+FinalAdjustedTaxEnumType,GIR2703,Covered Taxes for uncertain tax position recorded as a reduction to Covered Taxes in prior year - Article 4.1.2 (c)
+FinalAdjustedTaxEnumType,GIR2704,Qualified Refundable Tax Credit or Marketable Transferable Tax Credits recorded as a reduction to current tax expense - Article 4.1.2 (d)
+FinalAdjustedTaxEnumType,GIR2705,Qualified Flow-through Tax Benefits of Qualified Ownership Interests - Article 3.2.1 (c)
+FinalAdjustedTaxEnumType,GIR2706,Current tax expense on income excluded from GloBE Income or Loss - Article 4.1.3 (a)
+FinalAdjustedTaxEnumType,GIR2707,Non-Qualified Refundable Tax Credit or Other Tax Credits not recorded as a reduction to current tax expense - Article 4.1.3 (b)
+FinalAdjustedTaxEnumType,GIR2708,Covered Taxes refunded or credited not treated as an adjustment to current tax expense - Article 4.1.3 (c)
+FinalAdjustedTaxEnumType,GIR2709,Current tax expense related to uncertain tax position - Article 4.1.3 (d)
+FinalAdjustedTaxEnumType,GIR2710,Current tax expense not expected to be paid within three years - Article 4.1.3 (e)
+FinalAdjustedTaxEnumType,GIR2711,Post-filing adjustments - Article 4.6.1
+FinalAdjustedTaxEnumType,GIR2712,Covered Taxes relating to Net Asset Gain or Net Asset Loss - Article 3.2.6
+FinalAdjustedTaxEnumType,GIR2713,Reduction of Covered Taxes of the UPE that is a Flow-through Entity - Article 7.1
+FinalAdjustedTaxEnumType,GIR2714,Covered Taxes for GloBE Income of the UPE reduced under a Deductible Dividend Regime - Article 7.2.2
+FinalAdjustedTaxEnumType,GIR2715,Deemed Distribution Tax - Article 7.3
+FinalAdjustedTaxEnumType,GIR2716,Taxable Distribution Method election - Article 7.6 (b)
+FinalAdjustedTaxEnumType,GIR2717,Total Deferred Tax Adjustment Amount - Article 4.4.1(b)
+FinalAdjustedTaxEnumType,GIR2718,Increase or decrease in Covered Taxes recorded in equity or OCI - Article 4.1.1 (c)
+FinalAdjustedTaxEnumType,GIR2719,Excess Negative Tax Expense Carry Forward generated - Article 4.1.5 and 5.2.1
+FinalAdjustedTaxEnumType,GIR2720,Decrease in Covered Taxes by the remaining balance of the Excess Negative Tax Expense Carry-forward - Article 4.1.5 and 5.2.1
+ExTypeOfEntityEnumType,GIR2801,Governmental Entity
+ExTypeOfEntityEnumType,GIR2802,International Organisation
+ExTypeOfEntityEnumType,GIR2803,Non-profit Organisation
+ExTypeOfEntityEnumType,GIR2804,Pension Fund
+ExTypeOfEntityEnumType,GIR2805,Pension Fund that is not a Pension Services Entity
+DeminimisSimpleBasisEnumType,GIR2901,De minimis election
+DeminimisSimpleBasisEnumType,GIR2902,Simplified Calculation for Non-material Constituent Entities
+TinEnumType,GIR3001,Tax Identification Number
+TinEnumType,GIR3002,Functionally equivalent number
+TinEnumType,GIR3003,Agreed GIR designated number
+TinEnumType,GIR3004,Not required to be reported
+CurrencyEnumType,GIR3101,Local
+CurrencyEnumType,GIR3102,CFS
+OecdDocTypeIndicEnumType,OECD0,Resend Data
+OecdDocTypeIndicEnumType,OECD1,New Data
+OecdDocTypeIndicEnumType,OECD2,Corrected Data
+OecdDocTypeIndicEnumType,OECD3,Deletion of Data
+OecdDocTypeIndicEnumType,OECD10,Resend Test Data
+OecdDocTypeIndicEnumType,OECD11,New Test Data
+OecdDocTypeIndicEnumType,OECD12,Corrected Test Data
+OecdDocTypeIndicEnumType,OECD13,Deletion of Test Data
+OecdNameTypeEnumType,OECD201,SMFAliasOrOther
+OecdNameTypeEnumType,OECD202,indiv (individual)
+OecdNameTypeEnumType,OECD203,alias
+OecdNameTypeEnumType,OECD204,nick (nickname)
+OecdNameTypeEnumType,OECD205,aka (also known as)
+OecdNameTypeEnumType,OECD206,dba (doing business as)
+OecdNameTypeEnumType,OECD207,legal (legal name)
+OecdNameTypeEnumType,OECD208,atbirth (name at birth)
+OecdLegalAddressTypeEnumType,OECD301,residentialOrBusiness
+OecdLegalAddressTypeEnumType,OECD302,residential
+OecdLegalAddressTypeEnumType,OECD303,business
+OecdLegalAddressTypeEnumType,OECD304,registeredOffice
+OecdLegalAddressTypeEnumType,OECD305,unspecified
