@@ -64,7 +64,7 @@ namespace GlobeMapper
 
         private void InitializeComponent()
         {
-            Text = "Globe XML Mapper";
+            Text = "GIR 2 XML Mapper";
             FormBorderStyle = FormBorderStyle.None;
             TopMost = true;
             AutoScaleMode = AutoScaleMode.Dpi;
@@ -98,7 +98,7 @@ namespace GlobeMapper
 
             var lblTitle = new Label
             {
-                Text = "Globe XML Mapper", Dock = DockStyle.Fill,
+                Text = "GIR 2 XML Mapper", Dock = DockStyle.Fill,
                 ForeColor = Color.FromArgb(220, 220, 220),
                 Font = new Font("Segoe UI Semibold", 10),
                 TextAlign = ContentAlignment.MiddleLeft,

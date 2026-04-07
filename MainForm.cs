@@ -40,36 +40,156 @@ namespace GlobeMapper
 
         private void InitializeComponent()
         {
-            Text = "Globe XML Mapper";
+            Text = "GIR 2 XML Mapper";
             AutoScaleMode = AutoScaleMode.Dpi;
-            FormBorderStyle = FormBorderStyle.FixedDialog;
+            FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new System.Drawing.Size(300, 260);
+            var iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "app.ico");
+            if (File.Exists(iconPath)) Icon = new System.Drawing.Icon(iconPath);
+            ClientSize = new System.Drawing.Size(630, 630);
+            BackColor = System.Drawing.Color.FromArgb(30, 30, 32);
+            ForeColor = System.Drawing.Color.FromArgb(220, 220, 224);
+            Font = new System.Drawing.Font("Segoe UI", 15f);
 
+            // 타이틀 레이블
+            var lblTitle = new Label
+            {
+                Text = "GIR 2 XML Mapper",
+                Dock = DockStyle.Top,
+                Height = 78,
+                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
+                Font = new System.Drawing.Font("Segoe UI Semibold", 19f),
+                ForeColor = System.Drawing.Color.FromArgb(230, 230, 235),
+                BackColor = System.Drawing.Color.FromArgb(22, 22, 24),
+            };
+
+            // 구분선
+            var divider = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 1,
+                BackColor = System.Drawing.Color.FromArgb(55, 55, 60),
+            };
+
+            // ── 그룹: 템플릿 생성 ─────────────────────────────────────────
+            // 헤더 레이블
+            var groupHeader = new Label
+            {
+                Text = "템플릿 생성",
+                Dock = DockStyle.Top,
+                Height = 48,
+                TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
+                Font = new System.Drawing.Font("Segoe UI", 13f),
+                ForeColor = System.Drawing.Color.FromArgb(130, 130, 140),
+                BackColor = System.Drawing.Color.FromArgb(32, 32, 36),
+                Padding = new Padding(18, 0, 0, 0),
+            };
+            // 헤더 하단 구분선
+            var groupHeaderDiv = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 1,
+                BackColor = System.Drawing.Color.FromArgb(55, 55, 62),
+            };
+            // 버튼 영역
+            var groupInner = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(18, 15, 18, 18),
+                RowCount = 3, ColumnCount = 1,
+                BackColor = System.Drawing.Color.Transparent,
+            };
+            groupInner.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            for (int i = 0; i < 3; i++)
+                groupInner.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33f));
+            groupInner.Controls.Add(MakeButton("MNE 생성",     BtnCreateTemplate_Click, new Padding(0, 0, 0, 9)), 0, 0);
+            groupInner.Controls.Add(MakeButton("합산단위 생성", BtnCreateCountry_Click,  new Padding(0, 0, 0, 9)), 0, 1);
+            groupInner.Controls.Add(MakeButton("구성기업 생성", BtnCreateCe_Click,       new Padding(0, 0, 0, 0)), 0, 2);
+
+            // 그룹 컨테이너 (테두리 = 배경색)
+            var groupBox = new Panel
+            {
+                Margin = new Padding(0, 0, 0, 24),
+                Dock = DockStyle.Fill,
+                BackColor = System.Drawing.Color.FromArgb(55, 55, 62), // 테두리 색
+                Padding = new Padding(1),
+            };
+            var groupInside = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = System.Drawing.Color.FromArgb(36, 36, 40),
+            };
+            // DockStyle.Top은 역순: groupInner(Fill) → div → header
+            groupInside.Controls.Add(groupInner);
+            groupInside.Controls.Add(groupHeaderDiv);
+            groupInside.Controls.Add(groupHeader);
+            groupBox.Controls.Add(groupInside);
+
+            // ── 전체 레이아웃 ─────────────────────────────────────────────
             var layout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(20),
-                RowCount = 6,
-                ColumnCount = 1
+                Padding = new Padding(42, 30, 42, 42),
+                RowCount = 3, ColumnCount = 1,
+                BackColor = System.Drawing.Color.Transparent,
             };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            for (int i = 0; i < 6; i++)
-                layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));      // 서식 편집
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));      // XML 변환하기
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));  // 템플릿 생성 그룹
 
-            layout.Controls.Add(MakeButton("파일 열기",            BtnOpen_Click,           new Padding(0, 0, 0, 14)), 0, 0);
-            layout.Controls.Add(MakeButton("템플릿 생성",           BtnCreateTemplate_Click, new Padding(0, 0, 0, 4)),  0, 1);
-            layout.Controls.Add(MakeButton("국가별 시트 생성",       BtnCreateCountry_Click,  new Padding(0, 0, 0, 4)),  0, 2);
-            layout.Controls.Add(MakeButton("구성기업 생성",          BtnCreateCe_Click,       new Padding(0, 0, 0, 14)), 0, 3);
-            layout.Controls.Add(MakeButton("XML 변환하기",           BtnConvert_Click,        new Padding(0, 0, 0, 0)),  0, 4);
+            layout.Controls.Add(MakeButton("서식 편집",    BtnOpen_Click,    new Padding(0, 0, 0, 12), primary: true), 0, 0);
+            layout.Controls.Add(MakeButton("XML 변환하기", BtnConvert_Click, new Padding(0, 0, 0, 24), accent: true),  0, 1);
+            layout.Controls.Add(groupBox,                                                                               0, 2);
 
+            // 버전 정보 (하단 고정)
+            var lblVersion = new Label
+            {
+                Text = "v1   만료일 2026.6.30   라이선스 DA",
+                Dock = DockStyle.Bottom,
+                Height = 36,
+                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
+                Font = new System.Drawing.Font("Segoe UI", 12f),
+                ForeColor = System.Drawing.Color.FromArgb(80, 80, 90),
+                BackColor = System.Drawing.Color.FromArgb(22, 22, 24),
+            };
+
+            // DockStyle.Top은 나중에 추가된 것이 위로 가므로 역순
+            Controls.Add(lblVersion);
             Controls.Add(layout);
+            Controls.Add(divider);
+            Controls.Add(lblTitle);
         }
 
-        private static Button MakeButton(string text, EventHandler click, Padding margin)
+        private static Button MakeButton(string text, EventHandler click, Padding margin,
+            bool primary = false, bool accent = false)
         {
-            var btn = new Button { Text = text, Dock = DockStyle.Fill, Height = 34, Margin = margin };
+            var bg = accent  ? System.Drawing.Color.FromArgb(210, 160, 0)
+                   : primary ? System.Drawing.Color.FromArgb(200, 90, 15)
+                              : System.Drawing.Color.FromArgb(44, 44, 48);
+            var hover = accent  ? System.Drawing.Color.FromArgb(225, 175, 10)
+                       : primary ? System.Drawing.Color.FromArgb(218, 105, 25)
+                                  : System.Drawing.Color.FromArgb(54, 54, 60);
+            var fg = (accent || primary)
+                   ? System.Drawing.Color.White
+                   : System.Drawing.Color.FromArgb(210, 210, 215);
+
+            var btn = new Button
+            {
+                Text = text,
+                Dock = DockStyle.Fill,
+                Height = 63,
+                Margin = margin,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = bg,
+                ForeColor = fg,
+                Font = new System.Drawing.Font("Segoe UI", 15f),
+                Cursor = Cursors.Hand,
+            };
+            btn.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(65, 65, 72);
+            btn.FlatAppearance.BorderSize = 1;
+            btn.FlatAppearance.MouseOverBackColor = hover;
             btn.Click += click;
             return btn;
         }
@@ -331,22 +451,24 @@ namespace GlobeMapper
             using var f = new Form
             {
                 Text = "개수 입력",
-                Size = new System.Drawing.Size(260, 130),
+                Size = new System.Drawing.Size(540, 270),
                 FormBorderStyle = FormBorderStyle.FixedDialog,
                 StartPosition = FormStartPosition.CenterParent,
-                MaximizeBox = false, MinimizeBox = false
+                MaximizeBox = false, MinimizeBox = false,
+                Font = new System.Drawing.Font("Segoe UI", 15f)
             };
             var lbl = new Label { Text = prompt, AutoSize = true,
-                Location = new System.Drawing.Point(16, 16) };
+                Location = new System.Drawing.Point(36, 36) };
             var nud = new NumericUpDown
             {
-                Location = new System.Drawing.Point(16, 40), Width = 80,
-                Minimum = 1, Maximum = 99, Value = 1
+                Location = new System.Drawing.Point(36, 87), Width = 165,
+                Height = 48, Minimum = 1, Maximum = 99, Value = 1,
+                Font = new System.Drawing.Font("Segoe UI", 16f)
             };
             var btnOk = new Button
             {
                 Text = "확인", DialogResult = DialogResult.OK,
-                Location = new System.Drawing.Point(152, 38), Width = 72
+                Location = new System.Drawing.Point(330, 84), Width = 150, Height = 54
             };
             f.Controls.AddRange(new Control[] { lbl, nud, btnOk });
             f.AcceptButton = btnOk;

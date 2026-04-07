@@ -48,7 +48,11 @@ namespace GlobeMapper.Services
 
             _app = Activator.CreateInstance(excelType);
             _app.Visible = true;
-            _workbook = _app.Workbooks.Open(path);
+
+            // Workbooks 컬렉션을 변수에 받아 명시적으로 해제 (숨은 COM 객체 방지)
+            dynamic workbooks = _app.Workbooks;
+            _workbook = workbooks.Open(path);
+            Marshal.ReleaseComObject(workbooks);
 
             // 첫 번째 시트로 이동 (메타 시트 생성 전 위치 기억)
             var firstSheet = _workbook.Sheets[1];
@@ -1091,11 +1095,29 @@ namespace GlobeMapper.Services
 
         private void QuitApp()
         {
-            try { _app?.Quit(); } catch { }
+            // 순서 중요: 워크북 → Quit → 앱 → GC
+            // GC.Collect 없이는 dynamic으로 생성된 중간 COM 객체(RCW)가 남아 Excel 프로세스가 살아있게 됨
+            try
+            {
+                if (_workbook != null)
+                {
+                    Marshal.ReleaseComObject(_workbook);
+                    _workbook = null;
+                }
+                _app?.Quit();
+            }
+            catch { }
             finally
             {
-                if (_app != null) { Marshal.ReleaseComObject(_app); _app = null; }
-                if (_workbook != null) { Marshal.ReleaseComObject(_workbook); _workbook = null; }
+                if (_app != null)
+                {
+                    Marshal.ReleaseComObject(_app);
+                    _app = null;
+                }
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
             }
         }
 
