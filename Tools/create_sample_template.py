@@ -124,8 +124,31 @@ def fill_data(wb):
     ws["B6"] = "DE"
     ws["I6"] = "GIR1202"
 
+    # === 시트 2 (국가별 적용면제) ===
+    ws = wb["2"]
+    # 2.1 기본사항
+    ws["O6"] = "KR"
+    ws["O9"] = "KR"
+    ws["O10"] = "FALSE"
+    # 2.2.1 적용면제
+    ws["O15"] = "GIR1201"
+    # 2.2.1.2 간소화 계산
+    ws["H19"] = "5000000"
+    ws["N19"] = "800000"
+    ws["H20"] = "4800000"
+    ws["N20"] = "750000"
+    ws["H21"] = "4500000"
+    ws["N21"] = "700000"
+    ws["H22"] = "4766667"
+    ws["N22"] = "750000"
+    # 2.2.2 최소적용제외
+    ws["E39"] = "5000000"
+    ws["I39"] = "4900000"
+    ws["L39"] = "1000000"
+    ws["O39"] = "950000"
 
-def add_guide_sheets(wb):
+
+def _unused_add_guide_sheets(wb):
     """각 데이터 시트 뒤에 작성요령 정보를 별도 시트로 추가"""
 
     guides = {
@@ -253,8 +276,7 @@ def main():
     print("_META blockCount 업데이트...")
     update_meta_block_counts(wb)
 
-    print("작성요령 시트 추가...")
-    add_guide_sheets(wb)
+    # 작성요령은 별도 .md 파일로 분리 (시트에 넣지 않음)
 
     wb.save(OUTPUT)
     print(f"완료: {OUTPUT}")

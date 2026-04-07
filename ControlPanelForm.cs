@@ -232,6 +232,29 @@ namespace GlobeMapper
                 });
             }
 
+            else if (sheetName == "2")
+            {
+                // 시트 2: 국가별 적용면제 페이지 추가/삭제
+                var count = _excel.GetRowBlockCount(sheetName);
+                y = AddSectionLabel("국가별 적용면제", $"{count}개", y);
+                y = AddButtonRow(y,
+                    ("+", Color.LimeGreen, () => { _excel.AddSheet2Block(sheetName); UpdateDynamicPanel(sheetName); }),
+                    ("−", Color.Tomato, () =>
+                    {
+                        if (count <= 1) { MessageBox.Show("최소 1개는 유지해야 합니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+                        if (MessageBox.Show("마지막 페이지를 삭제하시겠습니까?", "확인", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+                        _excel.RemoveSheet2Block(sheetName);
+                        UpdateDynamicPanel(sheetName);
+                    })
+                );
+                y += 4;
+                y = AddActionButton("시트 초기화", Color.FromArgb(100, 100, 100), y, () =>
+                {
+                    if (MessageBox.Show("시트를 초기 상태로 되돌리시겠습니까?", "확인", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                    _excel.ResetSheet2(sheetName);
+                    UpdateDynamicPanel(sheetName);
+                });
+            }
             else if (sheetName == "1.4")
             {
                 // 1.4: 정보 요약 행 추가/삭제 (헤더 3행, 데이터 시작 4행)

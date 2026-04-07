@@ -1,0 +1,75 @@
+{
+  "description": "국가별 적용면제 및 제외 (Summary 상세)",
+  "sheetName": "2",
+  "repeatable": false,
+  "sections": {
+    "2.1": {
+      "description": "국가별 기본사항",
+      "mappings": [
+        { "cell": "O6",  "target": "Summary.Jurisdiction.JurisdictionName", "type": "enum:CountryCodeType",       "label": "1. 소재지국" },
+        { "cell": "O7",  "target": "Summary.Jurisdiction.Subgroup.Type",    "type": "enum:TypeofSubGroupEnumType", "label": "2. 하위그룹 유형" },
+        { "cell": "O8",  "target": "Summary.Jurisdiction.Subgroup.Tin",     "type": "string",                      "label": "3. 하위그룹 최상위기업 TIN" },
+        { "cell": "O9",  "target": "Summary.JurWithTaxingRights.JurisdictionName", "type": "enum:CountryCodeType", "label": "4. 과세권 국가" },
+        { "cell": "O10", "target": "Summary.JurWithTaxingRights.ReportDifference", "type": "bool",                 "label": "5. 보고내용 차이 여부" }
+      ]
+    },
+    "2.2.1": {
+      "description": "적용면제",
+      "mappings": [
+        { "cell": "O15", "target": "Summary.SafeHarbour", "type": "enum:SafeHarbourEnumType", "label": "1. 적용면제 유형" }
+      ]
+    },
+    "2.2.1.2": {
+      "description": "일반적 적용면제 - 간소화 계산",
+      "mappings": [
+        { "cell": "H19", "target": "Summary.EtrException.DeminimisNmce.Rfy1.Revenue",     "type": "string", "label": "총수익 - 신고연도" },
+        { "cell": "N19", "target": "Summary.EtrException.DeminimisNmce.Rfy1.SimplifiedTax","type": "string", "label": "간이세액 - 신고연도" },
+        { "cell": "H20", "target": "Summary.EtrException.DeminimisNmce.Rfy2.Revenue",     "type": "string", "label": "총수익 - 직전연도" },
+        { "cell": "N20", "target": "Summary.EtrException.DeminimisNmce.Rfy2.SimplifiedTax","type": "string", "label": "간이세액 - 직전연도" },
+        { "cell": "H21", "target": "Summary.EtrException.DeminimisNmce.Rfy3.Revenue",     "type": "string", "label": "총수익 - 직전전연도" },
+        { "cell": "N21", "target": "Summary.EtrException.DeminimisNmce.Rfy3.SimplifiedTax","type": "string", "label": "간이세액 - 직전전연도" },
+        { "cell": "H22", "target": "Summary.EtrException.DeminimisNmce.Average.Revenue",  "type": "string", "label": "총수익 - 3년평균" },
+        { "cell": "N22", "target": "Summary.EtrException.DeminimisNmce.Average.SimplifiedTax","type": "string", "label": "간이세액 - 3년평균" }
+      ]
+    },
+    "2.2.1.3": {
+      "description": "전환기 적용면제",
+      "mappings": [
+        { "cell": "O28", "target": "Summary.EtrException.TransCbcr.Revenue",    "type": "string", "label": "1. 총수익금액" },
+        { "cell": "O29", "target": "Summary.EtrException.TransCbcr.ProfitLoss", "type": "string", "label": "2. 세전손익금액" },
+        { "cell": "O30", "target": "Summary.EtrException.TransCbcr.IncomeTax",  "type": "string", "label": "3. 간이 대상조세" },
+        { "cell": "O33", "target": "Summary.EtrException.UtprSafeHarbour.CITRate","type": "string","label": "1. 법인세 명목세율" }
+      ]
+    },
+    "2.2.2": {
+      "description": "최소적용제외 특례",
+      "mappings": [
+        { "cell": "E39", "target": "Summary.EtrException.DeminimisNmce.Rfy1.AccountingRevenue",   "type": "string", "label": "회계매출-신고" },
+        { "cell": "I39", "target": "Summary.EtrException.DeminimisNmce.Rfy1.GlobeRevenue",        "type": "string", "label": "GloBE매출-신고" },
+        { "cell": "L39", "target": "Summary.EtrException.DeminimisNmce.Rfy1.AccountingProfitLoss","type": "string", "label": "회계순이익-신고" },
+        { "cell": "O39", "target": "Summary.EtrException.DeminimisNmce.Rfy1.GlobeProfitLoss",     "type": "string", "label": "GloBE소득-신고" },
+        { "cell": "E40", "target": "Summary.EtrException.DeminimisNmce.Rfy2.AccountingRevenue",   "type": "string", "label": "회계매출-직전" },
+        { "cell": "I40", "target": "Summary.EtrException.DeminimisNmce.Rfy2.GlobeRevenue",        "type": "string", "label": "GloBE매출-직전" },
+        { "cell": "L40", "target": "Summary.EtrException.DeminimisNmce.Rfy2.AccountingProfitLoss","type": "string", "label": "회계순이익-직전" },
+        { "cell": "O40", "target": "Summary.EtrException.DeminimisNmce.Rfy2.GlobeProfitLoss",     "type": "string", "label": "GloBE소득-직전" },
+        { "cell": "E41", "target": "Summary.EtrException.DeminimisNmce.Rfy3.AccountingRevenue",   "type": "string", "label": "회계매출-직전전" },
+        { "cell": "I41", "target": "Summary.EtrException.DeminimisNmce.Rfy3.GlobeRevenue",        "type": "string", "label": "GloBE매출-직전전" },
+        { "cell": "L41", "target": "Summary.EtrException.DeminimisNmce.Rfy3.AccountingProfitLoss","type": "string", "label": "회계순이익-직전전" },
+        { "cell": "O41", "target": "Summary.EtrException.DeminimisNmce.Rfy3.GlobeProfitLoss",     "type": "string", "label": "GloBE소득-직전전" },
+        { "cell": "E42", "target": "Summary.EtrException.DeminimisNmce.Average.AccountingRevenue", "type": "string", "label": "회계매출-3년평균" },
+        { "cell": "I42", "target": "Summary.EtrException.DeminimisNmce.Average.GlobeRevenue",      "type": "string", "label": "GloBE매출-3년평균" },
+        { "cell": "L42", "target": "Summary.EtrException.DeminimisNmce.Average.AccountingProfitLoss","type": "string","label": "회계순이익-3년평균" },
+        { "cell": "O42", "target": "Summary.EtrException.DeminimisNmce.Average.GlobeProfitLoss",   "type": "string", "label": "GloBE소득-3년평균" }
+      ]
+    },
+    "2.3": {
+      "description": "해외진출 초기 특례",
+      "mappings": [
+        { "cell": "M45", "target": "Summary.InitialIntActivity.StartDate",     "type": "date",   "label": "1. 최초적용연도 개시일" },
+        { "cell": "M46", "target": "Summary.InitialIntActivity.ReferenceJur",  "type": "enum:CountryCodeType", "label": "2. 준거국가" },
+        { "cell": "M47", "target": "Summary.InitialIntActivity.TangibleAsset", "type": "string", "label": "3. 준거국가 유형자산" },
+        { "cell": "M48", "target": "Summary.InitialIntActivity.NumCountries",  "type": "string", "label": "4. 구성기업 소재 국가 수" }
+      ]
+    }
+  }
+}

@@ -17,6 +17,7 @@ namespace GlobeMapper.Services
             { "1.3.2.2",  () => new Mapping_1_3_2_2() },
             // 1.3.3은 XML에 포함하지 않음 (AdditionalDataPoint 미사용)
             { "1.4",      () => new Mapping_1_4() },
+            { "2",        () => new Mapping_2() },
         };
 
         /// <summary>
@@ -41,10 +42,7 @@ namespace GlobeMapper.Services
             foreach (var (section, sheetName) in mappings)
             {
                 if (!MapperFactory.TryGetValue(section, out var createMapper))
-                {
-                    errors.Add($"알 수 없는 섹션 '{section}' (시트: {sheetName})");
-                    continue;
-                }
+                    continue; // 매퍼 없는 섹션은 스킵 (1.3.3 등 XML 미포함)
 
                 if (!workbook.TryGetWorksheet(sheetName, out var ws))
                 {

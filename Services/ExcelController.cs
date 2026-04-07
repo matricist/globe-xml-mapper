@@ -554,6 +554,103 @@ namespace GlobeMapper.Services
 
         #endregion
 
+        #region 시트2 복합 블록 (3~23 + 26~54)
+
+        // 시트2는 블록1(3~23) + 간격(24~25) + 블록2(26~54) = 총 52행이 한 세트
+        private const int S2_BLOCK1_START = 3;
+        private const int S2_BLOCK1_END = 23;
+        private const int S2_GAP_ROWS = 2;  // 24~25행 (간격)
+        private const int S2_BLOCK2_START = 26;
+        private const int S2_BLOCK2_END = 54;
+        private const int S2_TOTAL_SIZE = 52; // (23-3+1) + 2 + (54-26+1)
+        private const int S2_INSERT_GAP = 2;  // 세트 간 간격
+
+        public void AddSheet2Block(string sheetName)
+        {
+            dynamic ws = _workbook.Sheets[sheetName];
+            var count = GetMetaInt(sheetName, "blockCount", 1);
+
+            // 삽입 위치: 첫 세트 끝(54행) + (count-1) * (totalSize + gap) + gap
+            var insertRow = S2_BLOCK2_END + 1 + (count - 1) * (S2_TOTAL_SIZE + S2_INSERT_GAP) + S2_INSERT_GAP;
+
+            // 빈 행 삽입
+            dynamic insertRange = ws.Rows[$"{insertRow}:{insertRow + S2_TOTAL_SIZE - 1}"];
+            insertRange.Insert();
+
+            // 블록1 복사 (3~23 → insertRow ~ insertRow+20)
+            var block1Size = S2_BLOCK1_END - S2_BLOCK1_START + 1;
+            dynamic src1 = ws.Range[ws.Cells[S2_BLOCK1_START, 1], ws.Cells[S2_BLOCK1_END, 18]];
+            dynamic dst1 = ws.Range[ws.Cells[insertRow, 1], ws.Cells[insertRow + block1Size - 1, 18]];
+            src1.Copy(dst1);
+
+            // 행 높이 복사 (블록1)
+            for (int i = 0; i < block1Size; i++)
+                ws.Rows[insertRow + i].RowHeight = (double)ws.Rows[S2_BLOCK1_START + i].RowHeight;
+
+            // 블록2 복사 (26~54 → insertRow+block1Size+gap ~ ...)
+            var block2Start = insertRow + block1Size + S2_GAP_ROWS;
+            var block2Size = S2_BLOCK2_END - S2_BLOCK2_START + 1;
+            dynamic src2 = ws.Range[ws.Cells[S2_BLOCK2_START, 1], ws.Cells[S2_BLOCK2_END, 18]];
+            dynamic dst2 = ws.Range[ws.Cells[block2Start, 1], ws.Cells[block2Start + block2Size - 1, 18]];
+            src2.Copy(dst2);
+
+            // 행 높이 복사 (블록2)
+            for (int i = 0; i < block2Size; i++)
+                ws.Rows[block2Start + i].RowHeight = (double)ws.Rows[S2_BLOCK2_START + i].RowHeight;
+
+            // 데이터 셀 초기화
+            ClearDataCells(ws, insertRow, insertRow + block1Size - 1);
+            ClearDataCells(ws, block2Start, block2Start + block2Size - 1);
+
+            SetMetaInt(sheetName, "blockCount", count + 1);
+        }
+
+        public bool RemoveSheet2Block(string sheetName)
+        {
+            var count = GetMetaInt(sheetName, "blockCount", 1);
+            if (count <= 1) return false;
+
+            dynamic ws = _workbook.Sheets[sheetName];
+
+            // 마지막 세트의 시작 위치
+            var lastSetStart = S2_BLOCK2_END + 1 + (count - 2) * (S2_TOTAL_SIZE + S2_INSERT_GAP) + S2_INSERT_GAP;
+            var lastSetEnd = lastSetStart + S2_TOTAL_SIZE - 1;
+
+            // 간격 포함 삭제
+            _app.DisplayAlerts = false;
+            try
+            {
+                dynamic deleteRange = ws.Rows[$"{lastSetStart - S2_INSERT_GAP}:{lastSetEnd}"];
+                deleteRange.Delete();
+            }
+            finally { _app.DisplayAlerts = true; }
+
+            SetMetaInt(sheetName, "blockCount", count - 1);
+            return true;
+        }
+
+        public void ResetSheet2(string sheetName)
+        {
+            var count = GetMetaInt(sheetName, "blockCount", 1);
+            if (count > 1)
+            {
+                dynamic ws = _workbook.Sheets[sheetName];
+                var firstExtraStart = S2_BLOCK2_END + 1 + S2_INSERT_GAP;
+                var lastEnd = S2_BLOCK2_END + (count - 1) * (S2_TOTAL_SIZE + S2_INSERT_GAP) + S2_TOTAL_SIZE;
+
+                _app.DisplayAlerts = false;
+                try { ws.Rows[$"{firstExtraStart}:{lastEnd}"].Delete(); }
+                finally { _app.DisplayAlerts = true; }
+            }
+
+            dynamic sheet = _workbook.Sheets[sheetName];
+            ClearDataCells(sheet, S2_BLOCK1_START, S2_BLOCK1_END);
+            ClearDataCells(sheet, S2_BLOCK2_START, S2_BLOCK2_END);
+            SetMetaInt(sheetName, "blockCount", 1);
+        }
+
+        #endregion
+
         #region 1.3.3 단순 행 추가/삭제
 
         /// <summary>
