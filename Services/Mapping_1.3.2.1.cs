@@ -18,13 +18,13 @@ namespace GlobeMapper.Services
         // O19=QUTPR초기(+15), O20=소유합계(+16), O21=UPE소유(+17)
         private static readonly (int Offset, string Target)[] FieldMap =
         {
-            (1,  "Ce.ChangeFlag"),
-            (2,  "Ce.Id.ResCountryCode"),
-            (3,  "Ce.Id.Rules"),
-            (4,  "Ce.Id.Name"),
-            (5,  "Ce.Id.Tin.Value"),
-            (6,  "Ce.Id.ReceivingTin"),
-            (7,  "Ce.Id.GlobeStatus"),
+            (1, "Ce.ChangeFlag"),
+            (2, "Ce.Id.ResCountryCode"),
+            (3, "Ce.Id.Rules"),
+            (4, "Ce.Id.Name"),
+            (5, "Ce.Id.Tin.Value"),
+            (6, "Ce.Id.ReceivingTin"),
+            (7, "Ce.Id.GlobeStatus"),
             (12, "Ce.Qiir.PopeIpe"),
             (13, "Ce.Qiir.Exception.Tin.Value"),
             (14, "Ce.Qiir.MopeIpe.Tin.Value"),
@@ -36,12 +36,19 @@ namespace GlobeMapper.Services
         // 별첨 시트 이름
         private const string ATTACH_SHEET = "1.3.2.1 첨부";
 
-        public Mapping_1_3_2_1() : base("mapping_1.3.2.1.json") { }
+        public Mapping_1_3_2_1()
+            : base("mapping_1.3.2.1.json") { }
 
-        public override void Map(IXLWorksheet ws, Globe.GlobeOecd globe, List<string> errors, string fileName)
+        public override void Map(
+            IXLWorksheet ws,
+            Globe.GlobeOecd globe,
+            List<string> errors,
+            string fileName
+        )
         {
             globe.GlobeBody.GeneralSection ??= new Globe.GlobeBodyTypeGeneralSection();
-            globe.GlobeBody.GeneralSection.CorporateStructure ??= new Globe.CorporateStructureType();
+            globe.GlobeBody.GeneralSection.CorporateStructure ??=
+                new Globe.CorporateStructureType();
             var cs = globe.GlobeBody.GeneralSection.CorporateStructure;
 
             // _META에서 CE 블록 수 읽기
@@ -61,12 +68,17 @@ namespace GlobeMapper.Services
                 {
                     var row = blockStartRow + offset;
                     var cellValue = ws.Cell(row, 15).GetString()?.Trim(); // O열 = 15
-                    if (string.IsNullOrEmpty(cellValue)) continue;
+                    if (string.IsNullOrEmpty(cellValue))
+                        continue;
 
                     // multi 처리 (쉼표 구분)
                     var isMulti = target is "Ce.Id.Rules" or "Ce.Id.GlobeStatus";
                     var values = isMulti
-                        ? cellValue.Split(',', System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries)
+                        ? cellValue.Split(
+                            ',',
+                            System.StringSplitOptions.RemoveEmptyEntries
+                                | System.StringSplitOptions.TrimEntries
+                        )
                         : new[] { cellValue };
 
                     foreach (var val in values)
@@ -79,8 +91,15 @@ namespace GlobeMapper.Services
             }
         }
 
-        private void SetCeValue(Globe.CorporateStructureTypeCe ce, Globe.CorporateStructureType cs,
-            string target, string val, List<string> errors, string fileName, int row)
+        private void SetCeValue(
+            Globe.CorporateStructureTypeCe ce,
+            Globe.CorporateStructureType cs,
+            string target,
+            string val,
+            List<string> errors,
+            string fileName,
+            int row
+        )
         {
             var entry = new MappingEntry { Cell = $"O{row}", Label = target };
 
@@ -88,54 +107,106 @@ namespace GlobeMapper.Services
             {
                 case "Ce.ChangeFlag":
                     cs.UnreportChangeCorpStr = ParseBool(val);
-                    cs.UnreportChangeCorpStrSpecified = true; break;
+                    cs.UnreportChangeCorpStrSpecified = true;
+                    break;
                 case "Ce.Id.ResCountryCode":
-                    SetEnum<Globe.CountryCodeType>(val, v => ce.Id.ResCountryCode.Add(v), errors, fileName, entry); break;
+                    SetEnum<Globe.CountryCodeType>(
+                        val,
+                        v => ce.Id.ResCountryCode.Add(v),
+                        errors,
+                        fileName,
+                        entry
+                    );
+                    break;
                 case "Ce.Id.Rules":
-                    SetEnum<Globe.IdTypeRulesEnumType>(val, v => ce.Id.Rules.Add(v), errors, fileName, entry); break;
-                case "Ce.Id.Name": ce.Id.Name = val; break;
+                    SetEnum<Globe.IdTypeRulesEnumType>(
+                        val,
+                        v => ce.Id.Rules.Add(v),
+                        errors,
+                        fileName,
+                        entry
+                    );
+                    break;
+                case "Ce.Id.Name":
+                    ce.Id.Name = val;
+                    break;
                 case "Ce.Id.Tin.Value":
-                    ce.Id.Tin.Add(new Globe.TinType { Value = val }); break;
+                    ce.Id.Tin.Add(new Globe.TinType { Value = val });
+                    break;
                 case "Ce.Id.ReceivingTin":
-                    ce.Id.Tin.Add(new Globe.TinType { Value = val, IssuedBy = Globe.CountryCodeType.Kr, IssuedBySpecified = true }); break;
+                    ce.Id.Tin.Add(
+                        new Globe.TinType
+                        {
+                            Value = val,
+                            IssuedBy = Globe.CountryCodeType.Kr,
+                            IssuedBySpecified = true,
+                        }
+                    );
+                    break;
                 case "Ce.Id.GlobeStatus":
-                    SetEnum<Globe.IdTypeGloBeStatusEnumType>(val, v => ce.Id.GlobeStatus.Add(v), errors, fileName, entry); break;
+                    SetEnum<Globe.IdTypeGloBeStatusEnumType>(
+                        val,
+                        v => ce.Id.GlobeStatus.Add(v),
+                        errors,
+                        fileName,
+                        entry
+                    );
+                    break;
                 case "Ce.Qiir.PopeIpe":
                     ce.Qiir ??= new Globe.CorporateStructureTypeCeQiir();
-                    SetEnum<Globe.PopeipeEnumType>(val, v => ce.Qiir.PopeIpe = v, errors, fileName, entry); break;
+                    SetEnum<Globe.PopeipeEnumType>(
+                        val,
+                        v => ce.Qiir.PopeIpe = v,
+                        errors,
+                        fileName,
+                        entry
+                    );
+                    break;
                 case "Ce.Qiir.Exception.Tin.Value":
                     ce.Qiir ??= new Globe.CorporateStructureTypeCeQiir();
                     ce.Qiir.Exception ??= new Globe.CorporateStructureTypeCeQiirException();
-                    ce.Qiir.Exception.Tin = new Globe.TinType { Value = val }; break;
-                case "Ce.Qiir.MopeIpe.Tin.Value": break;
+                    ce.Qiir.Exception.Tin = new Globe.TinType { Value = val };
+                    break;
+                case "Ce.Qiir.MopeIpe.Tin.Value":
+                    break;
                 case "Ce.Qutpr.Art93":
                     ce.Qutpr ??= new Globe.CorporateStructureTypeCeQutpr();
-                    ce.Qutpr.Art93 = ParseBool(val); break;
+                    ce.Qutpr.Art93 = ParseBool(val);
+                    break;
                 case "Ce.Qutpr.AggOwnership":
                     ce.Qutpr ??= new Globe.CorporateStructureTypeCeQutpr();
                     if (decimal.TryParse(val, out var agg))
-                    { ce.Qutpr.AggOwnership = agg / 100m; ce.Qutpr.AggOwnershipSpecified = true; }
+                    {
+                        ce.Qutpr.AggOwnership = agg / 100m;
+                        ce.Qutpr.AggOwnershipSpecified = true;
+                    }
                     break;
                 case "Ce.Qutpr.UpeOwnership":
                     ce.Qutpr ??= new Globe.CorporateStructureTypeCeQutpr();
                     ce.Qutpr.UpeOwnership = ParseBool(val);
-                    ce.Qutpr.UpeOwnershipSpecified = true; break;
+                    ce.Qutpr.UpeOwnershipSpecified = true;
+                    break;
             }
         }
 
         /// <summary>
         /// 별첨 시트에서 별첨N의 주주 데이터를 읽어 Ownership에 추가.
         /// </summary>
-        private void MapOwnershipFromAttach(IXLWorkbook workbook,
-            Globe.CorporateStructureTypeCe ce, int attachNum,
-            List<string> errors, string fileName)
+        private void MapOwnershipFromAttach(
+            IXLWorkbook workbook,
+            Globe.CorporateStructureTypeCe ce,
+            int attachNum,
+            List<string> errors,
+            string fileName
+        )
         {
             if (!workbook.TryGetWorksheet(ATTACH_SHEET, out var attachWs))
                 return;
 
             // "별첨N" 제목 행 찾기
             var startRow = FindAttachStart(attachWs, attachNum);
-            if (startRow < 0) return;
+            if (startRow < 0)
+                return;
 
             // 제목(1) + 빈행(1) + 헤더(1) = 3행 뒤부터 데이터
             var dataRow = startRow + 3;
@@ -145,17 +216,31 @@ namespace GlobeMapper.Services
                 var tinVal = attachWs.Cell(dataRow, 3).GetString()?.Trim();
                 var pctVal = attachWs.Cell(dataRow, 4).GetString()?.Trim();
 
-                if (string.IsNullOrEmpty(typeVal) && string.IsNullOrEmpty(tinVal) && string.IsNullOrEmpty(pctVal))
+                if (
+                    string.IsNullOrEmpty(typeVal)
+                    && string.IsNullOrEmpty(tinVal)
+                    && string.IsNullOrEmpty(pctVal)
+                )
                     break;
 
                 // 다음 별첨 제목이면 종료
-                if (typeVal != null && typeVal.StartsWith("첨부")) break;
+                if (typeVal != null && typeVal.StartsWith("첨부"))
+                    break;
 
                 var ownership = new Globe.CorporateStructureTypeCeOwnership();
 
                 if (!string.IsNullOrEmpty(typeVal))
-                    SetEnum<Globe.OwnershipTypeEnumType>(typeVal, v => ownership.OwnershipType = v,
-                        errors, fileName, new MappingEntry { Cell = $"첨부!B{dataRow}", Label = $"첨부{attachNum} 유형" });
+                    SetEnum<Globe.OwnershipTypeEnumType>(
+                        typeVal,
+                        v => ownership.OwnershipType = v,
+                        errors,
+                        fileName,
+                        new MappingEntry
+                        {
+                            Cell = $"첨부!B{dataRow}",
+                            Label = $"첨부{attachNum} 유형",
+                        }
+                    );
 
                 if (!string.IsNullOrEmpty(tinVal))
                     ownership.Tin = new Globe.TinType { Value = tinVal };
@@ -174,7 +259,8 @@ namespace GlobeMapper.Services
             for (int r = 1; r <= 500; r++)
             {
                 var val = ws.Cell(r, 2).GetString()?.Trim();
-                if (val == target) return r;
+                if (val == target)
+                    return r;
             }
             return -1;
         }

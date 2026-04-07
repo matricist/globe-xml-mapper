@@ -12,29 +12,31 @@ namespace GlobeMapper
         private readonly ExcelController _excel;
         private Label _lblCurrentSheet;
         private Panel _bodyPanel;
+        private Panel _divider;
         private Panel _dynamicPanel;
         private Button btnToggle;
         private Timer _sheetTracker;
         private string _lastSheetName;
-        private Point _dragOffset;
+        private Point _dragStart;
+        private Point _formStart;
         private bool _dragging;
         private bool _collapsed;
 
-        // 시트2(1.3.1)의 최종모기업 행 블록: 3~11행
         private const int UPE_BLOCK_START = 3;
-        private const int UPE_BLOCK_END = 11;
-        private const int UPE_BLOCK_GAP = 2;
-
-        // 시트5(1.3.2.2)의 제외기업 행 블록: 3~6행
-        private const int EX_BLOCK_START = 3;
-        private const int EX_BLOCK_END = 6;
-        private const int EX_BLOCK_GAP = 2;
-
-        // 첨부 시트 이름
+        private const int UPE_BLOCK_END   = 11;
+        private const int UPE_BLOCK_GAP   = 2;
+        private const int EX_BLOCK_START  = 3;
+        private const int EX_BLOCK_END    = 6;
+        private const int EX_BLOCK_GAP    = 2;
         private const string ATTACH_SHEET_NAME = "1.3.2.1 첨부";
 
-        // 별첨 번호 상태 (별첨 시트 활성 시)
-        private int _selectedAttachNum = 1;
+        private int _selectedAttachNum  = 1;
+        private int _selectedSheet3Page = 1;
+
+        private const int PAD     = 14;
+        private const int PANEL_W = 500;
+        private const int TITLE_H = 36;
+        private const int ROW_H   = 44;
 
         public ControlPanelForm(ExcelController excel)
         {
@@ -43,50 +45,79 @@ namespace GlobeMapper
             StartSheetTracker();
         }
 
+        protected override void OnLoad(EventArgs e)
+        {
+            base.OnLoad(e);
+            LayoutBodyPanel();
+            if (_lastSheetName != null)
+                UpdateDynamicPanel(_lastSheetName);
+        }
+
+        // DPI 스케일링 완료 후 body 요소 좌표 확정
+        private void LayoutBodyPanel()
+        {
+            var w = ClientSize.Width - PAD * 2;
+            _lblCurrentSheet.SetBounds(PAD, PAD, w, 32);
+            _divider.SetBounds(PAD, PAD + 36, w, 1);
+            _dynamicPanel.SetBounds(PAD, PAD + 36 + 1 + 6, w, 0);
+        }
+
         private void InitializeComponent()
         {
             Text = "Globe XML Mapper";
             FormBorderStyle = FormBorderStyle.None;
             TopMost = true;
             AutoScaleMode = AutoScaleMode.Dpi;
-            BackColor = Color.FromArgb(45, 45, 48);
+            BackColor = Color.FromArgb(37, 37, 38);
             ForeColor = Color.White;
             StartPosition = FormStartPosition.Manual;
-            Location = new Point(Screen.PrimaryScreen.WorkingArea.Right - 380, 80);
-            Size = new Size(360, 200);
+            Location = new Point(Screen.PrimaryScreen.WorkingArea.Right - PANEL_W - 30, 50);
+            Size = new Size(PANEL_W, 200);
 
-            // 타이틀 바
+            // ── 타이틀바: TableLayoutPanel으로 글씨·버튼 잘림 방지 ────────
             var titleBar = new Panel
             {
-                Dock = DockStyle.Top,
-                Height = 28,
-                BackColor = Color.FromArgb(30, 30, 30),
-                Cursor = Cursors.SizeAll
+                Dock = DockStyle.Top, Height = TITLE_H,
+                BackColor = Color.FromArgb(28, 28, 28), Cursor = Cursors.SizeAll
             };
-            titleBar.MouseDown += (s, e) => { _dragging = true; _dragOffset = e.Location; };
-            titleBar.MouseMove += (s, e) => { if (_dragging) Location = new Point(Location.X + e.X - _dragOffset.X, Location.Y + e.Y - _dragOffset.Y); };
-            titleBar.MouseUp += (s, e) => _dragging = false;
+            titleBar.MouseDown += TitleDrag_Down;
+            titleBar.MouseMove += TitleDrag_Move;
+            titleBar.MouseUp   += (s, ev) => _dragging = false;
+
+            var titleLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
+                BackColor = Color.Transparent,
+                Margin = Padding.Empty, Padding = new Padding(10, 0, 0, 0)
+            };
+            titleLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            titleLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 44));
+            titleLayout.MouseDown += TitleDrag_Down;
+            titleLayout.MouseMove += TitleDrag_Move;
+            titleLayout.MouseUp   += (s, ev) => _dragging = false;
 
             var lblTitle = new Label
             {
-                Text = "Globe XML Mapper",
-                AutoSize = true, Location = new Point(8, 5),
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                Text = "Globe XML Mapper", Dock = DockStyle.Fill,
+                ForeColor = Color.FromArgb(220, 220, 220),
+                Font = new Font("Segoe UI Semibold", 10),
+                TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Transparent
             };
-            lblTitle.MouseDown += (s, e) => { _dragging = true; _dragOffset = new Point(e.X + lblTitle.Left, e.Y + lblTitle.Top); };
-            lblTitle.MouseMove += (s, e) => { if (_dragging) Location = new Point(Location.X + e.X + lblTitle.Left - _dragOffset.X, Location.Y + e.Y + lblTitle.Top - _dragOffset.Y); };
-            lblTitle.MouseUp += (s, e) => _dragging = false;
+            lblTitle.MouseDown += TitleDrag_Down;
+            lblTitle.MouseMove += TitleDrag_Move;
+            lblTitle.MouseUp   += (s, ev) => _dragging = false;
 
             btnToggle = new Button
             {
-                Text = "─", Size = new Size(28, 22), Location = new Point(325, 3),
-                FlatStyle = FlatStyle.Flat, ForeColor = Color.White,
-                BackColor = Color.FromArgb(60, 60, 60), Font = new Font("Segoe UI", 8)
+                Text = "─", Dock = DockStyle.Fill,
+                FlatStyle = FlatStyle.Flat, ForeColor = Color.Gray,
+                BackColor = Color.FromArgb(50, 50, 50),
+                Font = new Font("Segoe UI", 9),
+                Margin = new Padding(2, 4, 4, 4)
             };
             btnToggle.FlatAppearance.BorderSize = 0;
-            btnToggle.Click += (s, e) =>
+            btnToggle.Click += (s, ev) =>
             {
                 _collapsed = !_collapsed;
                 _bodyPanel.Visible = !_collapsed;
@@ -94,43 +125,44 @@ namespace GlobeMapper
                 ResizeToFit();
             };
 
-            titleBar.Controls.Add(lblTitle);
-            titleBar.Controls.Add(btnToggle);
+            titleLayout.Controls.Add(lblTitle, 0, 0);
+            titleLayout.Controls.Add(btnToggle, 1, 0);
+            titleBar.Controls.Add(titleLayout);
 
-            // 본문 패널
-            _bodyPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
+            // ── 본문 패널: 절대좌표 (OnLoad에서 실제 크기로 조정) ─────────
+            _bodyPanel = new Panel { Dock = DockStyle.Fill };
 
-            var y = 4;
-
-            // 현재 시트 표시
             _lblCurrentSheet = new Label
             {
                 Text = "현재 시트: -",
-                Location = new Point(8, y), Size = new Size(336, 20),
-                ForeColor = Color.FromArgb(100, 200, 255),
-                Font = new Font("Segoe UI", 8.5f)
+                ForeColor = Color.FromArgb(86, 186, 240),
+                Font = new Font("Segoe UI", 11f),
+                TextAlign = ContentAlignment.MiddleLeft
             };
+            _divider = new Panel { BackColor = Color.FromArgb(60, 60, 60) };
+            _dynamicPanel = new Panel { BackColor = Color.Transparent };
+
             _bodyPanel.Controls.Add(_lblCurrentSheet);
-            y += 24;
-
-            // 구분선
-            _bodyPanel.Controls.Add(new Panel
-            {
-                Location = new Point(8, y), Size = new Size(336, 1),
-                BackColor = Color.FromArgb(70, 70, 70)
-            });
-            y += 6;
-
-            // 동적 버튼 영역 (시트에 따라 내용 변경)
-            _dynamicPanel = new Panel
-            {
-                Location = new Point(0, y), Size = new Size(360, 100),
-                BackColor = Color.Transparent
-            };
+            _bodyPanel.Controls.Add(_divider);
             _bodyPanel.Controls.Add(_dynamicPanel);
 
             Controls.Add(_bodyPanel);
             Controls.Add(titleBar);
+        }
+
+        private void TitleDrag_Down(object s, MouseEventArgs e)
+        {
+            _dragging  = true;
+            _dragStart = ((Control)s).PointToScreen(e.Location);
+            _formStart = Location;
+        }
+        private void TitleDrag_Move(object s, MouseEventArgs e)
+        {
+            if (!_dragging) return;
+            var cur = ((Control)s).PointToScreen(e.Location);
+            Location = new Point(
+                _formStart.X + cur.X - _dragStart.X,
+                _formStart.Y + cur.Y - _dragStart.Y);
         }
 
         #region 시트별 동적 UI
@@ -142,346 +174,322 @@ namespace GlobeMapper
 
             if (sheetName == "1.3.1")
             {
-                // 시트2: 최종모기업 추가/삭제 + 시트 초기화
                 var count = _excel.GetRowBlockCount(sheetName);
-                y = AddSectionLabel("최종모기업", $"{count}개", y);
-                y = AddButtonRow(y,
-                    ("+", Color.LimeGreen, () => { _excel.AddRowBlock(sheetName, UPE_BLOCK_START, UPE_BLOCK_END, UPE_BLOCK_GAP); UpdateDynamicPanel(sheetName); }),
-                    ("−", Color.Tomato, () =>
-                    {
-                        if (count <= 1) { MessageBox.Show("최소 1개는 유지해야 합니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-                        if (MessageBox.Show("마지막 최종모기업을 삭제하시겠습니까?", "확인", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+                y = AddSectionRow("최종모기업", $"{count}개", y,
+                    () => { _excel.AddRowBlock(sheetName, UPE_BLOCK_START, UPE_BLOCK_END, UPE_BLOCK_GAP); UpdateDynamicPanel(sheetName); },
+                    () => {
+                        if (count <= 1) { Warn("최소 1개는 유지해야 합니다."); return; }
+                        if (!Confirm("마지막 최종모기업을 삭제하시겠습니까?")) return;
                         _excel.RemoveRowBlock(sheetName, UPE_BLOCK_START, UPE_BLOCK_END, UPE_BLOCK_GAP);
                         UpdateDynamicPanel(sheetName);
-                    })
-                );
+                    });
                 y += 4;
-                y = AddActionButton("시트 초기화", Color.FromArgb(100, 100, 100), y, () =>
+                y = AddActionButton("시트 초기화", Color.FromArgb(52, 52, 56), y, () =>
                 {
-                    if (MessageBox.Show("시트를 초기 상태로 되돌리시겠습니까?", "확인", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                    if (!Confirm("시트를 초기 상태로 되돌리시겠습니까?", true)) return;
                     _excel.ResetSheet(sheetName, UPE_BLOCK_START, UPE_BLOCK_END, UPE_BLOCK_GAP);
                     UpdateDynamicPanel(sheetName);
                 });
             }
             else if (sheetName != null && sheetName.Contains("첨부"))
             {
-                // 첨부 시트 (1.3.2.1 첨부)
                 var ceCount = _excel.GetCeBlockCount("1.3.2.1");
-                if (_selectedAttachNum > ceCount) _selectedAttachNum = 1;
-                if (_selectedAttachNum < 1) _selectedAttachNum = 1;
+                if (_selectedAttachNum < 1 || _selectedAttachNum > ceCount) _selectedAttachNum = 1;
 
-                y = AddAttachSelector(y, ceCount, sheetName);
+                y = AddNumberSelector(y, "첨부 번호:", ceCount,
+                    () => _selectedAttachNum, n => _selectedAttachNum = n, sheetName);
                 y += 4;
 
                 var ownerCount = _excel.GetOwnerRowCount(sheetName, _selectedAttachNum);
-                y = AddSectionLabel($"첨부{_selectedAttachNum} 주주", $"{ownerCount}행", y);
-                y = AddButtonRow(y,
-                    ("+", Color.LimeGreen, () => { _excel.AddOwnerRow(sheetName, _selectedAttachNum); UpdateDynamicPanel(sheetName); }),
-                    ("−", Color.Tomato, () =>
-                    {
-                        if (ownerCount <= 0) { MessageBox.Show("삭제할 행이 없습니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-                        _excel.RemoveOwnerRow(sheetName, _selectedAttachNum);
-                        UpdateDynamicPanel(sheetName);
-                    })
-                );
+                y = AddSectionRow($"첨부{_selectedAttachNum} 주주", $"{ownerCount}행", y,
+                    () => { _excel.AddOwnerRow(sheetName, _selectedAttachNum); UpdateDynamicPanel(sheetName); },
+                    () => {
+                        if (ownerCount <= 0) { Warn("삭제할 행이 없습니다."); return; }
+                        _excel.RemoveOwnerRow(sheetName, _selectedAttachNum); UpdateDynamicPanel(sheetName);
+                    });
             }
             else if (sheetName == "1.3.2.1")
             {
-                // 시트3: 구성기업 추가/삭제 + 시트 초기화
                 var count = _excel.GetCeBlockCount(sheetName);
-                y = AddSectionLabel("구성기업", $"{count}개", y);
-                y = AddButtonRow(y,
-                    ("+", Color.LimeGreen, () => { _excel.AddCeBlock(sheetName, ATTACH_SHEET_NAME); UpdateDynamicPanel(sheetName); }),
-                    ("−", Color.Tomato, () =>
-                    {
-                        if (count <= 1) { MessageBox.Show("최소 1개는 유지해야 합니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-                        if (MessageBox.Show("마지막 구성기업을 삭제하시겠습니까?", "확인", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
-                        _excel.RemoveCeBlock(sheetName, ATTACH_SHEET_NAME);
-                        UpdateDynamicPanel(sheetName);
-                    })
-                );
+                y = AddSectionRow("구성기업", $"{count}개", y,
+                    () => { _excel.AddCeBlock(sheetName, ATTACH_SHEET_NAME); UpdateDynamicPanel(sheetName); },
+                    () => {
+                        if (count <= 1) { Warn("최소 1개는 유지해야 합니다."); return; }
+                        if (!Confirm("마지막 구성기업을 삭제하시겠습니까?")) return;
+                        _excel.RemoveCeBlock(sheetName, ATTACH_SHEET_NAME); UpdateDynamicPanel(sheetName);
+                    });
                 y += 4;
-                y = AddActionButton("시트 초기화", Color.FromArgb(100, 100, 100), y, () =>
+                y = AddActionButton("시트 초기화", Color.FromArgb(52, 52, 56), y, () =>
                 {
-                    if (MessageBox.Show("시트를 초기 상태로 되돌리시겠습니까?\n모든 구성기업 및 첨부 데이터가 삭제됩니다.", "확인", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                    if (!Confirm("시트를 초기 상태로 되돌리시겠습니까?\n모든 구성기업 및 첨부 데이터가 삭제됩니다.", true)) return;
                     _excel.ResetCeSheet(sheetName, ATTACH_SHEET_NAME);
                     UpdateDynamicPanel(sheetName);
                 });
             }
             else if (sheetName == "1.3.2.2")
             {
-                // 시트5: 제외기업 추가/삭제 + 시트 초기화
                 var count = _excel.GetRowBlockCount(sheetName);
-                y = AddSectionLabel("제외기업", $"{count}개", y);
-                y = AddButtonRow(y,
-                    ("+", Color.LimeGreen, () => { _excel.AddRowBlock(sheetName, EX_BLOCK_START, EX_BLOCK_END, EX_BLOCK_GAP); UpdateDynamicPanel(sheetName); }),
-                    ("−", Color.Tomato, () =>
-                    {
-                        if (count <= 1) { MessageBox.Show("최소 1개는 유지해야 합니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-                        if (MessageBox.Show("마지막 제외기업을 삭제하시겠습니까?", "확인", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+                y = AddSectionRow("제외기업", $"{count}개", y,
+                    () => { _excel.AddRowBlock(sheetName, EX_BLOCK_START, EX_BLOCK_END, EX_BLOCK_GAP); UpdateDynamicPanel(sheetName); },
+                    () => {
+                        if (count <= 1) { Warn("최소 1개는 유지해야 합니다."); return; }
+                        if (!Confirm("마지막 제외기업을 삭제하시겠습니까?")) return;
                         _excel.RemoveRowBlock(sheetName, EX_BLOCK_START, EX_BLOCK_END, EX_BLOCK_GAP);
                         UpdateDynamicPanel(sheetName);
-                    })
-                );
+                    });
                 y += 4;
-                y = AddActionButton("시트 초기화", Color.FromArgb(100, 100, 100), y, () =>
+                y = AddActionButton("시트 초기화", Color.FromArgb(52, 52, 56), y, () =>
                 {
-                    if (MessageBox.Show("시트를 초기 상태로 되돌리시겠습니까?", "확인", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                    if (!Confirm("시트를 초기 상태로 되돌리시겠습니까?", true)) return;
                     _excel.ResetSheet(sheetName, EX_BLOCK_START, EX_BLOCK_END, EX_BLOCK_GAP);
                     UpdateDynamicPanel(sheetName);
                 });
             }
-
             else if (sheetName == "2")
             {
-                // 시트 2: 국가별 적용면제 페이지 추가/삭제
                 var count = _excel.GetRowBlockCount(sheetName);
-                y = AddSectionLabel("국가별 적용면제", $"{count}개", y);
-                y = AddButtonRow(y,
-                    ("+", Color.LimeGreen, () => { _excel.AddSheet2Block(sheetName); UpdateDynamicPanel(sheetName); }),
-                    ("−", Color.Tomato, () =>
-                    {
-                        if (count <= 1) { MessageBox.Show("최소 1개는 유지해야 합니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-                        if (MessageBox.Show("마지막 페이지를 삭제하시겠습니까?", "확인", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
-                        _excel.RemoveSheet2Block(sheetName);
-                        UpdateDynamicPanel(sheetName);
-                    })
-                );
+                y = AddSectionRow("국가별 적용면제", $"{count}개", y,
+                    () => { _excel.AddSheet2Block(sheetName); UpdateDynamicPanel(sheetName); },
+                    () => {
+                        if (count <= 1) { Warn("최소 1개는 유지해야 합니다."); return; }
+                        if (!Confirm("마지막 페이지를 삭제하시겠습니까?")) return;
+                        _excel.RemoveSheet2Block(sheetName); UpdateDynamicPanel(sheetName);
+                    });
                 y += 4;
-                y = AddActionButton("시트 초기화", Color.FromArgb(100, 100, 100), y, () =>
+                y = AddActionButton("시트 초기화", Color.FromArgb(52, 52, 56), y, () =>
                 {
-                    if (MessageBox.Show("시트를 초기 상태로 되돌리시겠습니까?", "확인", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-                    _excel.ResetSheet2(sheetName);
-                    UpdateDynamicPanel(sheetName);
+                    if (!Confirm("시트를 초기 상태로 되돌리시겠습니까?", true)) return;
+                    _excel.ResetSheet2(sheetName); UpdateDynamicPanel(sheetName);
                 });
             }
             else if (sheetName == "1.4")
             {
-                // 1.4: 정보 요약 행 추가/삭제 (헤더 3행, 데이터 시작 4행)
                 var count = _excel.GetRowBlockCount(sheetName);
-                y = AddSectionLabel("정보 요약", $"{count}행", y);
-                y = AddButtonRow(y,
-                    ("+", Color.LimeGreen, () => { _excel.AddSimpleRowByMeta(sheetName, 4); UpdateDynamicPanel(sheetName); }),
-                    ("−", Color.Tomato, () =>
-                    {
-                        if (count <= 1) { MessageBox.Show("최소 1행은 유지해야 합니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-                        _excel.RemoveSimpleRowByMeta(sheetName, 4);
-                        UpdateDynamicPanel(sheetName);
-                    })
-                );
+                y = AddSectionRow("정보 요약", $"{count}행", y,
+                    () => { _excel.AddSimpleRowByMeta(sheetName, 4); UpdateDynamicPanel(sheetName); },
+                    () => {
+                        if (count <= 1) { Warn("최소 1행은 유지해야 합니다."); return; }
+                        _excel.RemoveSimpleRowByMeta(sheetName, 4); UpdateDynamicPanel(sheetName);
+                    });
             }
             else if (sheetName == "1.3.3")
             {
-                // 1.3.3: 기업구조 변동 행 추가/삭제 (헤더 6행, 데이터 시작 7행)
                 var count = _excel.GetRowBlockCount(sheetName);
-                y = AddSectionLabel("기업구조 변동", $"{count}행", y);
-                y = AddButtonRow(y,
-                    ("+", Color.LimeGreen, () => { _excel.AddSimpleRowByMeta(sheetName, 7); UpdateDynamicPanel(sheetName); }),
-                    ("−", Color.Tomato, () =>
-                    {
-                        if (count <= 1) { MessageBox.Show("최소 1행은 유지해야 합니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-                        _excel.RemoveSimpleRowByMeta(sheetName, 7);
-                        UpdateDynamicPanel(sheetName);
-                    })
-                );
+                y = AddSectionRow("기업구조 변동", $"{count}행", y,
+                    () => { _excel.AddSimpleRowByMeta(sheetName, 7); UpdateDynamicPanel(sheetName); },
+                    () => {
+                        if (count <= 1) { Warn("최소 1행은 유지해야 합니다."); return; }
+                        _excel.RemoveSimpleRowByMeta(sheetName, 7); UpdateDynamicPanel(sheetName);
+                    });
             }
-
             else if (sheetName == "3.1~3.2.3.2")
             {
-                // 시트3: 페이지 추가 + 3개 행 추가 영역
                 var pageCount = _excel.GetRowBlockCount(sheetName);
-                y = AddSectionLabel("글로벌최저한세 계산", $"{pageCount}페이지", y);
-                y = AddButtonRow(y,
-                    ("+", Color.LimeGreen, () => { _excel.AddSheet3Page(sheetName); UpdateDynamicPanel(sheetName); }),
-                    ("−", Color.Tomato, () =>
-                    {
-                        if (pageCount <= 1) { MessageBox.Show("최소 1페이지는 유지해야 합니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-                        if (MessageBox.Show("마지막 페이지를 삭제하시겠습니까?", "확인", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
-                        _excel.RemoveSheet3Page(sheetName);
-                        UpdateDynamicPanel(sheetName);
-                    })
-                );
+                y = AddSectionRow("페이지", $"{pageCount}개", y,
+                    () => { _excel.AddSheet3Page(sheetName); UpdateDynamicPanel(sheetName); },
+                    () => {
+                        if (pageCount <= 1) { Warn("최소 1페이지는 유지해야 합니다."); return; }
+                        if (!Confirm("마지막 페이지를 삭제하시겠습니까?")) return;
+                        _excel.RemoveSheet3Page(sheetName); UpdateDynamicPanel(sheetName);
+                    });
+                y += 8;
 
-                y += 6;
+                if (_selectedSheet3Page > pageCount) _selectedSheet3Page = 1;
+                y = AddNumberSelector(y, "페이지 번호:", pageCount,
+                    () => _selectedSheet3Page, n => _selectedSheet3Page = n, sheetName);
+                y += 8;
 
-                // (c) 통합형피지배 (101행)
-                var cfcCount = _excel.GetSheet3RowCount(sheetName, "cfc");
-                y = AddSectionLabel("통합형피지배 행", $"{cfcCount}행", y);
-                y = AddButtonRow(y,
-                    ("+", Color.LimeGreen, () => { _excel.AddSheet3Row(sheetName, "cfc", 101); UpdateDynamicPanel(sheetName); }),
-                    ("−", Color.Tomato, () =>
-                    {
-                        if (cfcCount <= 1) { MessageBox.Show("최소 1행은 유지해야 합니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-                        _excel.RemoveSheet3Row(sheetName, "cfc", 101);
-                        UpdateDynamicPanel(sheetName);
-                    })
-                );
+                var pk = $"p{_selectedSheet3Page}";
 
-                // (c) 결손금 소급공제 (144행)
-                var cbCount = _excel.GetSheet3RowCount(sheetName, "carryback");
-                y = AddSectionLabel("결손금 소급공제 행", $"{cbCount}행", y);
-                y = AddButtonRow(y,
-                    ("+", Color.LimeGreen, () => { _excel.AddSheet3Row(sheetName, "carryback", 144); UpdateDynamicPanel(sheetName); }),
-                    ("−", Color.Tomato, () =>
-                    {
-                        if (cbCount <= 1) { MessageBox.Show("최소 1행은 유지해야 합니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-                        _excel.RemoveSheet3Row(sheetName, "carryback", 144);
-                        UpdateDynamicPanel(sheetName);
-                    })
-                );
+                var cfcCount = _excel.GetSheet3RowCount(sheetName, $"{pk}:cfc");
+                y = AddSectionRow("통합형피지배", $"{cfcCount}행", y,
+                    () => { _excel.AddSheet3Row(sheetName, $"{pk}:cfc", 101); UpdateDynamicPanel(sheetName); },
+                    () => { if (cfcCount <= 1) { Warn("최소 1행은 유지해야 합니다."); return; }
+                            _excel.RemoveSheet3Row(sheetName, $"{pk}:cfc", 101); UpdateDynamicPanel(sheetName); });
 
-                // (b) 제89조 (176행)
-                var artCount = _excel.GetSheet3RowCount(sheetName, "art89");
-                y = AddSectionLabel("제89조 행", $"{artCount}행", y);
-                y = AddButtonRow(y,
-                    ("+", Color.LimeGreen, () => { _excel.AddSheet3Row(sheetName, "art89", 176); UpdateDynamicPanel(sheetName); }),
-                    ("−", Color.Tomato, () =>
-                    {
-                        if (artCount <= 1) { MessageBox.Show("최소 1행은 유지해야 합니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-                        _excel.RemoveSheet3Row(sheetName, "art89", 176);
-                        UpdateDynamicPanel(sheetName);
-                    })
-                );
+                var cbCount = _excel.GetSheet3RowCount(sheetName, $"{pk}:carryback");
+                y = AddSectionRow("결손금 소급공제", $"{cbCount}행", y,
+                    () => { _excel.AddSheet3Row(sheetName, $"{pk}:carryback", 145); UpdateDynamicPanel(sheetName); },
+                    () => { if (cbCount <= 1) { Warn("최소 1행은 유지해야 합니다."); return; }
+                            _excel.RemoveSheet3Row(sheetName, $"{pk}:carryback", 145); UpdateDynamicPanel(sheetName); });
 
-                y += 4;
-                y = AddActionButton("시트 초기화", Color.FromArgb(100, 100, 100), y, () =>
+                var artCount = _excel.GetSheet3RowCount(sheetName, $"{pk}:art89");
+                y = AddSectionRow("제89조", $"{artCount}행", y,
+                    () => { _excel.AddSheet3Row(sheetName, $"{pk}:art89", 176); UpdateDynamicPanel(sheetName); },
+                    () => { if (artCount <= 1) { Warn("최소 1행은 유지해야 합니다."); return; }
+                            _excel.RemoveSheet3Row(sheetName, $"{pk}:art89", 176); UpdateDynamicPanel(sheetName); });
+
+                y += 8;
+                y = AddActionButton("시트 초기화", Color.FromArgb(52, 52, 56), y, () =>
                 {
-                    if (MessageBox.Show("시트를 초기 상태로 되돌리시겠습니까?", "확인", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-                    _excel.ResetSheet3(sheetName);
-                    UpdateDynamicPanel(sheetName);
+                    if (!Confirm("시트를 초기 상태로 되돌리시겠습니까?", true)) return;
+                    _excel.ResetSheet3(sheetName); UpdateDynamicPanel(sheetName);
                 });
             }
 
-            // 공통: 엑셀 종료
             y += 10;
-            y = AddActionButton("엑셀 종료하기", Color.FromArgb(80, 80, 80), y, BtnCloseExcel_Click);
+            y = AddActionButton("엑셀 종료하기", Color.FromArgb(48, 48, 52), y, BtnCloseExcel_Click);
 
             _dynamicPanel.Height = y + 4;
             ResizeToFit();
-        }
-
-        private bool IsSheetSection(string section, string sheetName)
-        {
-            var sheets = _excel.GetSectionSheets(section);
-            return sheets.Contains(sheetName) || sheetName.Contains($"({(section == "1.3.2.1" ? "2" : "3")})");
         }
 
         #endregion
 
         #region UI 헬퍼
 
-        private int AddSectionLabel(string name, string countText, int y)
+        // 섹션 행: [이름 ..........] [카운트] [+][-]
+        private int AddSectionRow(string name, string countText, int y, Action onAdd, Action onRemove)
         {
+            var w = _dynamicPanel.Width;
+            const int BTN_W = 28;
+            const int BTN_H = 28;
+            const int BTN_GAP = 4;
+            var btnArea = BTN_W * 2 + BTN_GAP + 2; // 오른쪽 끝 2px 여백
+            const int CNT_W = 54;
+            var btnY = y + (ROW_H - BTN_H) / 2;
+
             _dynamicPanel.Controls.Add(new Label
             {
-                Text = name, Location = new Point(8, y + 3), AutoSize = true,
-                ForeColor = Color.LightGray, Font = new Font("Segoe UI", 8.5f)
+                Text = name,
+                Bounds = new Rectangle(0, y, w - CNT_W - btnArea - 6, ROW_H),
+                ForeColor = Color.FromArgb(200, 200, 204),
+                Font = new Font("Segoe UI", 10.5f),
+                TextAlign = ContentAlignment.MiddleLeft
             });
             _dynamicPanel.Controls.Add(new Label
             {
-                Text = countText, Location = new Point(200, y + 3), AutoSize = true,
-                ForeColor = Color.White, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)
-            });
-            return y + 24;
-        }
-
-        private int AddAttachSelector(int y, int maxNum, string sheetName)
-        {
-            var lbl = new Label
-            {
-                Text = "별첨 번호:",
-                Location = new Point(8, y + 4), AutoSize = true,
-                ForeColor = Color.LightGray, Font = new Font("Segoe UI", 8.5f)
-            };
-            _dynamicPanel.Controls.Add(lbl);
-
-            var btnPrev = MakeSmallButton("◀", Color.White, new Point(90, y), () =>
-            {
-                if (_selectedAttachNum > 1) { _selectedAttachNum--; UpdateDynamicPanel(sheetName); }
+                Text = countText,
+                Bounds = new Rectangle(w - CNT_W - btnArea - 6, y, CNT_W, ROW_H),
+                ForeColor = Color.FromArgb(130, 130, 136),
+                Font = new Font("Segoe UI", 10f),
+                TextAlign = ContentAlignment.MiddleRight
             });
 
-            var txtNum = new TextBox
-            {
-                Text = _selectedAttachNum.ToString(),
-                Location = new Point(120, y), Size = new Size(35, 24),
-                TextAlign = HorizontalAlignment.Center,
-                BackColor = Color.FromArgb(60, 60, 60),
-                ForeColor = Color.White,
-                BorderStyle = BorderStyle.FixedSingle,
-                Font = new Font("Segoe UI", 9)
-            };
-            txtNum.KeyDown += (s, e) =>
-            {
-                if (e.KeyCode == Keys.Enter)
-                {
-                    if (int.TryParse(txtNum.Text, out var n) && n >= 1 && n <= maxNum)
-                    { _selectedAttachNum = n; UpdateDynamicPanel(sheetName); }
-                    else
-                    { txtNum.Text = _selectedAttachNum.ToString(); }
-                    e.SuppressKeyPress = true;
-                }
-            };
+            var btnAdd = MakeIconButton("+",
+                Color.FromArgb(88, 190, 110),
+                new Rectangle(w - btnArea, btnY, BTN_W, BTN_H), onAdd);
+            var btnRem = MakeIconButton("−",
+                Color.FromArgb(210, 80, 80),
+                new Rectangle(w - BTN_W - 2, btnY, BTN_W, BTN_H), onRemove);
 
-            var btnNext = MakeSmallButton("▶", Color.White, new Point(160, y), () =>
-            {
-                if (_selectedAttachNum < maxNum) { _selectedAttachNum++; UpdateDynamicPanel(sheetName); }
-            });
-
-            var lblMax = new Label
-            {
-                Text = $"/ {maxNum}",
-                Location = new Point(190, y + 4), AutoSize = true,
-                ForeColor = Color.Gray, Font = new Font("Segoe UI", 8f)
-            };
-
-            _dynamicPanel.Controls.AddRange(new Control[] { btnPrev, txtNum, btnNext, lblMax });
-            return y + 30;
+            _dynamicPanel.Controls.Add(btnAdd);
+            _dynamicPanel.Controls.Add(btnRem);
+            return y + ROW_H + 2;
         }
 
-        private int AddButtonRow(int y, (string text, Color color, Action click) btn1, (string text, Color color, Action click) btn2)
-        {
-            var b1 = MakeSmallButton(btn1.text, btn1.color, new Point(290, y - 22), btn1.click);
-            var b2 = MakeSmallButton(btn2.text, btn2.color, new Point(320, y - 22), btn2.click);
-            _dynamicPanel.Controls.Add(b1);
-            _dynamicPanel.Controls.Add(b2);
-            return y;
-        }
-
-        private Button MakeSmallButton(string text, Color foreColor, Point location, Action click)
+        private Button MakeIconButton(string text, Color iconColor, Rectangle bounds, Action click)
         {
             var btn = new Button
             {
-                Text = text, Size = new Size(26, 24), Location = location,
-                FlatStyle = FlatStyle.Flat, ForeColor = foreColor,
-                BackColor = Color.FromArgb(60, 60, 60),
-                Font = new Font("Segoe UI", 10, FontStyle.Bold)
+                Text = text, Bounds = bounds,
+                FlatStyle = FlatStyle.Flat,
+                ForeColor = iconColor,
+                BackColor = Color.FromArgb(52, 52, 56),
+                Font = new Font("Segoe UI", 12, FontStyle.Bold)
             };
-            btn.FlatAppearance.BorderSize = 0;
-            btn.Click += (s, e) => { try { click(); } catch (Exception ex) { MessageBox.Show(ex.Message, "오류", MessageBoxButtons.OK, MessageBoxIcon.Error); } };
+            btn.FlatAppearance.BorderSize = 1;
+            btn.FlatAppearance.BorderColor = Color.FromArgb(68, 68, 74);
+            btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(64, 64, 70);
+            btn.Click += (s, e) => { try { click(); } catch (Exception ex) { MessageBox.Show(ex.Message); } };
             return btn;
+        }
+
+        private int AddNumberSelector(int y, string label, int maxNum,
+            Func<int> getCurrent, Action<int> setCurrent, string sheetName)
+        {
+            var cur = getCurrent();
+            const int H = 30;
+
+            _dynamicPanel.Controls.Add(new Label
+            {
+                Text = label, Location = new Point(2, y + 5), AutoSize = true,
+                ForeColor = Color.FromArgb(180, 180, 180), Font = new Font("Segoe UI", 9.5f)
+            });
+
+            var baseX = 110;
+            var btnPrev = new Button
+            {
+                Text = "◀", Bounds = new Rectangle(baseX, y, 28, H),
+                FlatStyle = FlatStyle.Flat, ForeColor = Color.FromArgb(150, 150, 155),
+                BackColor = Color.FromArgb(52, 52, 56), Font = new Font("Segoe UI", 8)
+            };
+            btnPrev.FlatAppearance.BorderSize = 1;
+            btnPrev.FlatAppearance.BorderColor = Color.FromArgb(68, 68, 74);
+            btnPrev.FlatAppearance.MouseOverBackColor = Color.FromArgb(64, 64, 70);
+            btnPrev.Click += (s, e) => { if (cur > 1) { setCurrent(cur - 1); UpdateDynamicPanel(sheetName); } };
+
+            var txtNum = new TextBox
+            {
+                Text = cur.ToString(),
+                Bounds = new Rectangle(baseX + 34, y + 1, 38, H - 4),
+                TextAlign = HorizontalAlignment.Center,
+                BackColor = Color.FromArgb(50, 50, 52), ForeColor = Color.White,
+                BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 10)
+            };
+            txtNum.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode != Keys.Enter) return;
+                if (int.TryParse(txtNum.Text, out var n) && n >= 1 && n <= maxNum)
+                { setCurrent(n); UpdateDynamicPanel(sheetName); }
+                else txtNum.Text = cur.ToString();
+                e.SuppressKeyPress = true;
+            };
+
+            var btnNext = new Button
+            {
+                Text = "▶", Bounds = new Rectangle(baseX + 72, y, 28, H),
+                FlatStyle = FlatStyle.Flat, ForeColor = Color.FromArgb(150, 150, 155),
+                BackColor = Color.FromArgb(52, 52, 56), Font = new Font("Segoe UI", 8)
+            };
+            btnNext.FlatAppearance.BorderSize = 1;
+            btnNext.FlatAppearance.BorderColor = Color.FromArgb(68, 68, 74);
+            btnNext.FlatAppearance.MouseOverBackColor = Color.FromArgb(64, 64, 70);
+            btnNext.Click += (s, e) => { if (cur < maxNum) { setCurrent(cur + 1); UpdateDynamicPanel(sheetName); } };
+
+            _dynamicPanel.Controls.Add(new Label
+            {
+                Text = $"/ {maxNum}", Location = new Point(baseX + 104, y + 6),
+                AutoSize = true, ForeColor = Color.FromArgb(100, 100, 106), Font = new Font("Segoe UI", 9f)
+            });
+            _dynamicPanel.Controls.AddRange(new Control[] { btnPrev, txtNum, btnNext });
+            return y + H + 6;
         }
 
         private int AddActionButton(string text, Color bgColor, int y, Action click)
         {
             var btn = new Button
             {
-                Text = text, Location = new Point(8, y), Size = new Size(336, 30),
-                FlatStyle = FlatStyle.Flat, BackColor = bgColor,
-                ForeColor = Color.White, Font = new Font("Segoe UI", 9, FontStyle.Bold)
+                Text = text,
+                Bounds = new Rectangle(0, y, _dynamicPanel.Width, 34),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = bgColor,
+                ForeColor = Color.FromArgb(190, 190, 194),
+                Font = new Font("Segoe UI", 9f)
             };
             btn.FlatAppearance.BorderSize = 0;
+            btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(
+                Math.Min(bgColor.R + 12, 255),
+                Math.Min(bgColor.G + 12, 255),
+                Math.Min(bgColor.B + 12, 255));
             btn.Click += (s, e) => { try { click(); } catch (Exception ex) { MessageBox.Show(ex.Message, "오류", MessageBoxButtons.OK, MessageBoxIcon.Error); } };
             _dynamicPanel.Controls.Add(btn);
-            return y + 34;
+            return y + 40;
         }
 
         private void ResizeToFit()
         {
-            if (_collapsed)
-                Height = 28;
-            else
-                Height = 28 + 34 + _dynamicPanel.Height + 16; // titleBar + currentSheet+sep + dynamic + padding
+            if (_collapsed) { Height = TITLE_H; return; }
+            // TITLE_H + PAD + 32(라벨) + 36(간격+구분선) + _dynamicPanel.Height + PAD
+            var h = TITLE_H + PAD + 32 + 6 + 1 + 6 + _dynamicPanel.Height + PAD;
+            Height = Math.Max(h, 160);
         }
+
+        private static void Warn(string msg) =>
+            MessageBox.Show(msg, "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        private static bool Confirm(string msg, bool warning = false) =>
+            MessageBox.Show(msg, "확인", MessageBoxButtons.YesNo,
+                warning ? MessageBoxIcon.Warning : MessageBoxIcon.Question) == DialogResult.Yes;
 
         #endregion
 
@@ -494,22 +502,14 @@ namespace GlobeMapper
             {
                 try
                 {
-                    if (!_excel.IsOpen)
-                    {
-                        _sheetTracker.Stop();
-                        Close();
-                        return;
-                    }
+                    if (!_excel.IsOpen) { _sheetTracker.Stop(); Close(); return; }
 
                     var current = _excel.GetActiveSheetName();
-
-                    // _META 시트로 이동 방지
                     if (current == ExcelController.MetaSheetName)
                     {
                         _excel.ActivateSheet(_lastSheetName != null ? (object)_lastSheetName : 1);
                         return;
                     }
-
                     if (current != null && current != _lastSheetName)
                     {
                         _lastSheetName = current;
@@ -517,21 +517,16 @@ namespace GlobeMapper
                         UpdateDynamicPanel(current);
                     }
                 }
-                catch
-                {
-                    _sheetTracker.Stop();
-                    Close();
-                }
+                catch { _sheetTracker.Stop(); Close(); }
             };
             _sheetTracker.Start();
 
-            // 초기 한 번 실행
+            // 초기 시트명 기록 (UpdateDynamicPanel은 OnLoad에서 실행)
             var initial = _excel.GetActiveSheetName();
             if (initial != null)
             {
                 _lastSheetName = initial;
                 _lblCurrentSheet.Text = $"현재 시트: {initial}";
-                UpdateDynamicPanel(initial);
             }
         }
 
@@ -553,7 +548,6 @@ namespace GlobeMapper
             if (dlg.ShowDialog() != DialogResult.OK) return;
 
             var filePath = _excel.GetFilePathForMapping();
-
             var globe = new Globe.GlobeOecd
             {
                 Version = "2.0",
@@ -563,24 +557,13 @@ namespace GlobeMapper
 
             var orchestrator = new MappingOrchestrator();
             var mappingErrors = orchestrator.MapWorkbook(filePath, globe);
-
             var xml = XmlExportService.Serialize(globe);
             File.WriteAllText(dlg.FileName, xml, System.Text.Encoding.UTF8);
 
             var validationErrors = ValidationUtil.Validate(globe);
-
             var allErrors = new List<string>();
-            if (mappingErrors.Count > 0)
-            {
-                allErrors.Add("── 매핑 오류 ──");
-                allErrors.AddRange(mappingErrors);
-                allErrors.Add("");
-            }
-            if (validationErrors.Count > 0)
-            {
-                allErrors.Add("── 검증 오류 (에러코드 기준) ──");
-                allErrors.AddRange(validationErrors);
-            }
+            if (mappingErrors.Count > 0) { allErrors.Add("── 매핑 오류 ──"); allErrors.AddRange(mappingErrors); allErrors.Add(""); }
+            if (validationErrors.Count > 0) { allErrors.Add("── 검증 오류 (에러코드 기준) ──"); allErrors.AddRange(validationErrors); }
 
             var errorsPath = Path.ChangeExtension(dlg.FileName, ".errors.txt");
             if (allErrors.Count > 0)
@@ -590,16 +573,13 @@ namespace GlobeMapper
                     $"매핑 오류 {mappingErrors.Count}건 / 검증 오류 {validationErrors.Count}건{Environment.NewLine}{Environment.NewLine}" +
                     string.Join(Environment.NewLine, allErrors),
                     System.Text.Encoding.UTF8);
-
-                MessageBox.Show(
-                    $"XML 생성 완료.\n\n매핑 오류: {mappingErrors.Count}건\n검증 오류: {validationErrors.Count}건\n\n오류 목록: {errorsPath}",
+                MessageBox.Show($"XML 생성 완료.\n\n매핑 오류: {mappingErrors.Count}건\n검증 오류: {validationErrors.Count}건\n\n오류 목록: {errorsPath}",
                     "완료 (오류 있음)", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             else
             {
                 if (File.Exists(errorsPath)) File.Delete(errorsPath);
-                MessageBox.Show("XML 생성이 완료되었습니다.", "완료",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("XML 생성이 완료되었습니다.", "완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
 

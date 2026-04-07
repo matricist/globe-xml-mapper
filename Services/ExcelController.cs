@@ -568,14 +568,10 @@ namespace GlobeMapper.Services
             var count = GetMetaInt(sheetName, "blockCount", 1);
             var blockSize = S3_BLOCK_END - S3_BLOCK_START + 1; // 226행
 
-            // 삽입 위치
+            // 삽입 위치: 시트 끝에 직접 복사 (Insert 안 함 — 병합 셀 충돌 방지)
             var insertRow = S3_BLOCK_END + 1 + (count - 1) * (blockSize + S3_PAGE_GAP) + S3_PAGE_GAP;
 
-            // 빈 행 삽입
-            dynamic insertRange = ws.Rows[$"{insertRow}:{insertRow + blockSize - 1}"];
-            insertRange.Insert();
-
-            // 원본 전체 복사
+            // 원본 전체를 시트 끝에 직접 복사
             dynamic srcRange = ws.Range[ws.Cells[S3_BLOCK_START, 1], ws.Cells[S3_BLOCK_END, 18]];
             dynamic dstRange = ws.Range[ws.Cells[insertRow, 1], ws.Cells[insertRow + blockSize - 1, 18]];
             srcRange.Copy(dstRange);
@@ -686,11 +682,13 @@ namespace GlobeMapper.Services
 
         private static int GetDefaultRowCount(string subKey)
         {
-            return subKey switch
+            // subKey 형태: "p1:cfc", "p2:carryback" 등
+            var key = subKey.Contains(':') ? subKey.Split(':').Last() : subKey;
+            return key switch
             {
-                "cfc" => 2,    // 통합형피지배 초기 2행
-                "carryback" => 4, // 결손금 소급공제 초기 4행
-                "art89" => 5,  // 제89조 초기 5행
+                "cfc" => 2,       // 통합형피지배 초기 2행 (101~102)
+                "carryback" => 2, // 결손금 소급공제 초기 2행 (145~146)
+                "art89" => 5,     // 제89조 초기 5행 (176~180)
                 _ => 1
             };
         }
