@@ -1,21 +1,26 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using ClosedXML.Excel;
 
 namespace GlobeMapper.Services
 {
     /// <summary>
-    /// 1.3.3 기업구조 변동 — AdditionalDataPoint Collection에 매핑.
-    /// 행 반복 방식: 7행부터 데이터, blockCount로 행 수 결정.
+    /// 1.3.3 기업구조 변동 — CorporateStructureTypeCeOwnershipChange 매핑.
+    /// 행 반복 방식: 6행부터 데이터, blockCount로 행 수 결정.
+    /// 각 행을 CE.OwnershipChange에 추가 (CE는 1.3.2.1에서 이미 생성된 것 참조).
     /// </summary>
     public class Mapping_1_3_3 : MappingBase
     {
-        private const int DATA_START_ROW = 7;
+        private const int DATA_START_ROW = 6;
 
         public Mapping_1_3_3() : base("mapping_1.3.3.json") { }
 
         public override void Map(IXLWorksheet ws, Globe.GlobeOecd globe, List<string> errors, string fileName)
         {
             globe.GlobeBody.GeneralSection ??= new Globe.GlobeBodyTypeGeneralSection();
+            globe.GlobeBody.GeneralSection.CorporateStructure ??= new Globe.CorporateStructureType();
+            var cs = globe.GlobeBody.GeneralSection.CorporateStructure;
 
             var rowCount = 1;
             if (ws.Workbook.TryGetWorksheet(ExcelController.MetaSheetName, out var metaWs))
@@ -24,51 +29,86 @@ namespace GlobeMapper.Services
             for (int i = 0; i < rowCount; i++)
             {
                 var row = DATA_START_ROW + i;
-                var dp = new Globe.AdditionalDataPointType();
 
-                // B-C: 상호 → Description
+                // B: 구성기업 상호
                 var name = ws.Cell(row, 2).GetString()?.Trim();
-                if (!string.IsNullOrEmpty(name))
-                    dp.Description = name;
+                // D: 납세자번호 ("번호,유형,국가" 형식)
+                var tinRaw = ws.Cell(row, 4).GetString()?.Trim();
+                // F: 변동효력발생일
+                var dateRaw = ws.Cell(row, 6).GetString()?.Trim();
+                // H: 변동 전 기업유형 (multi, IdGlobeStatusEnumType)
+                var preTypeRaw = ws.Cell(row, 8).GetString()?.Trim();
+                // J: 소유지분 보유 기업 TIN ("번호,유형,국가" 형식)
+                var ownerTinRaw = ws.Cell(row, 10).GetString()?.Trim();
+                // M: 변동 전 소유지분(%)
+                var prePctRaw = ws.Cell(row, 13).GetString()?.Trim();
+                // P: 소유지분 보유 기업 유형 (OwnershipTypeEnumType)
+                var ownerTypeRaw = ws.Cell(row, 16).GetString()?.Trim();
 
-                // D-E: 납세자번호 → Text (TIN을 텍스트로)
-                var tin = ws.Cell(row, 4).GetString()?.Trim();
+                if (string.IsNullOrEmpty(name) && string.IsNullOrEmpty(tinRaw)) continue;
 
-                // F-G: 변동효력발생일
-                var dateVal = ws.Cell(row, 6).GetString()?.Trim();
+                // ── CE 찾기 ──────────────────────────────────────────────
+                var ce = FindCe(cs, name, tinRaw);
+                if (ce == null)
+                {
+                    // 1.3.2.1에 없는 CE면 새로 생성
+                    ce = new Globe.CorporateStructureTypeCe { Id = new Globe.IdType() };
+                    if (!string.IsNullOrEmpty(name)) ce.Id.Name = name;
+                    if (!string.IsNullOrEmpty(tinRaw)) ce.Id.Tin.Add(ParseTin(tinRaw));
+                    cs.Ce.Add(ce);
+                }
 
-                // H-I: 변동 전 기업유형
-                var pretype = ws.Cell(row, 8).GetString()?.Trim();
+                // ── OwnershipChange 생성 ──────────────────────────────────
+                var change = new Globe.CorporateStructureTypeCeOwnershipChange();
 
-                // J: 변동 후 기업유형
-                var posttype = ws.Cell(row, 10).GetString()?.Trim();
+                if (!string.IsNullOrEmpty(dateRaw) && DateTime.TryParse(dateRaw, out var changeDate))
+                    change.ChangeDate = changeDate;
 
-                // K-L: 소유지분 보유 기업
-                var owner = ws.Cell(row, 11).GetString()?.Trim();
+                if (!string.IsNullOrEmpty(preTypeRaw))
+                {
+                    foreach (var code in preTypeRaw.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        if (TryParseEnum<Globe.IdGlobeStatusEnumType>(code, out var status))
+                            change.PreGlobeStatus.Add(status);
+                        else
+                            errors.Add($"[{fileName}] 행{row} PreGlobeStatus 변환 실패: '{code}'");
+                    }
+                }
 
-                // M-O: 변동 전 소유지분(%)
-                var prePct = ws.Cell(row, 13).GetString()?.Trim();
+                if (!string.IsNullOrEmpty(ownerTinRaw))
+                {
+                    var preOwn = new Globe.CorporateStructureTypeCeOwnershipChangePreOwnership
+                    {
+                        Tin = ParseTin(ownerTinRaw)
+                    };
 
-                // P-R: 변동 후 소유지분(%)
-                var postPct = ws.Cell(row, 16).GetString()?.Trim();
+                    if (!string.IsNullOrEmpty(ownerTypeRaw))
+                    {
+                        if (TryParseEnum<Globe.OwnershipTypeEnumType>(ownerTypeRaw, out var ownerType))
+                            preOwn.OwnershipType = ownerType;
+                        else
+                            errors.Add($"[{fileName}] 행{row} OwnershipType 변환 실패: '{ownerTypeRaw}'");
+                    }
 
-                // 텍스트로 통합 저장
-                var parts = new List<string>();
-                if (!string.IsNullOrEmpty(tin)) parts.Add($"TIN:{tin}");
-                if (!string.IsNullOrEmpty(dateVal)) parts.Add($"변동일:{dateVal}");
-                if (!string.IsNullOrEmpty(pretype)) parts.Add($"변동전:{pretype}");
-                if (!string.IsNullOrEmpty(posttype)) parts.Add($"변동후:{posttype}");
-                if (!string.IsNullOrEmpty(owner)) parts.Add($"소유기업:{owner}");
-                if (!string.IsNullOrEmpty(prePct)) parts.Add($"변동전%:{prePct}");
-                if (!string.IsNullOrEmpty(postPct)) parts.Add($"변동후%:{postPct}");
+                    if (!string.IsNullOrEmpty(prePctRaw)
+                        && decimal.TryParse(prePctRaw, out var prePct))
+                        preOwn.PreOwnershipPercentage = prePct / 100m;
 
-                if (parts.Count > 0)
-                    dp.Text = string.Join("; ", parts);
+                    change.PreOwnership.Add(preOwn);
+                }
 
-                // 값이 하나라도 있으면 추가
-                if (!string.IsNullOrEmpty(dp.Description) || !string.IsNullOrEmpty(dp.Text))
-                    globe.GlobeBody.GeneralSection.AdditionalDataPoint.Add(dp);
+                ce.OwnershipChange.Add(change);
             }
+        }
+
+        private static Globe.CorporateStructureTypeCe FindCe(
+            Globe.CorporateStructureType cs, string name, string tinRaw)
+        {
+            var tinValue = tinRaw?.Split(',')[0].Trim();
+
+            return cs.Ce.FirstOrDefault(c =>
+                (!string.IsNullOrEmpty(tinValue) && c.Id?.Tin.Any(t => t.Value == tinValue) == true)
+                || (!string.IsNullOrEmpty(name) && c.Id?.Name == name));
         }
     }
 }

@@ -59,6 +59,59 @@ namespace GlobeMapper.Services
         protected static bool TryParseDate(string value, out DateTime result)
             => DateTime.TryParse(value, out result);
 
+        /// <summary>
+        /// TIN 미보유 시 사용. &lt;TIN TypeOfTIN="GIR3004" unknown="true"&gt;NOTIN&lt;/TIN&gt;
+        /// UPE(OtherUPE)에는 사용 불가 (에러 70005) — CE 등 non-UPE 전용.
+        /// </summary>
+        protected static Globe.TinType NoTin() => new Globe.TinType
+        {
+            Value = "NOTIN",
+            Unknown = true,
+            UnknownSpecified = true,
+            TypeOfTin = Globe.TinEnumType.Gir3004,
+            TypeOfTinSpecified = true,
+        };
+
+        /// <summary>
+        /// "번호,유형코드,발급국가" 형식 파싱. 유형·발급국가는 생략 가능.
+        /// 예: "1234567890,GIR3001,KR"
+        /// 빈 값이나 "NOTIN" 입력 시 unknown="true" 처리.
+        /// </summary>
+        protected static Globe.TinType ParseTin(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input) ||
+                input.Trim().Equals("NOTIN", StringComparison.OrdinalIgnoreCase))
+                return NoTin();
+
+            var parts = input.Split(',', StringSplitOptions.TrimEntries);
+            var tin = new Globe.TinType { Value = parts[0] };
+
+            if (parts.Length >= 2 && !string.IsNullOrEmpty(parts[1])
+                && TryParseEnum<Globe.TinEnumType>(parts[1], out var tinType))
+            {
+                tin.TypeOfTin = tinType;
+                tin.TypeOfTinSpecified = true;
+            }
+
+            if (parts.Length >= 3 && !string.IsNullOrEmpty(parts[2])
+                && TryParseEnum<Globe.CountryCodeType>(parts[2], out var country))
+            {
+                tin.IssuedBy = country;
+                tin.IssuedBySpecified = true;
+            }
+
+            return tin;
+        }
+
+        /// <summary>
+        /// "영문;국문" 형식 파싱. ';' 없으면 (value, null).
+        /// </summary>
+        protected static (string Name, string KName) ParseNameKName(string value)
+        {
+            var parts = value.Split(';', 2, StringSplitOptions.TrimEntries);
+            return parts.Length == 2 ? (parts[0], parts[1]) : (parts[0], null);
+        }
+
         protected static bool ParseBool(string value)
         {
             if (bool.TryParse(value, out var b)) return b;

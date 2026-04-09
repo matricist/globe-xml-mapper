@@ -1,43 +1,42 @@
 {
   "description": "신고구성기업 정보, 다국적기업그룹과 사업연도, 회계정보",
-  "sheetName": "1.1~1.2",
+  "sheetName": "다국적기업그룹 정보",
   "repeatable": false,
   "sections": {
     "header": {
       "description": "헤더 - 사업연도, 법인명, 사업자등록번호",
       "mappings": [
-        { "cell": "C3",  "target": "FilingInfo.Period.Start",            "type": "date",   "label": "사업연도 시작" },
-        { "cell": "C6",  "target": "FilingInfo.Period.End",              "type": "date",   "label": "사업연도 종료" },
-        { "cell": "P3",  "target": "FilingInfo.FilingCe.KName",          "type": "string", "label": "법인명(상호)" },
-        { "cell": "P5",  "target": "FilingInfo.FilingCe.Tin.Value",      "type": "string", "label": "사업자등록번호" }
+        { "cell": "C2",  "target": "FilingInfo.Period.Start",            "type": "date",   "label": "사업연도 시작" },
+        { "cell": "C5",  "target": "FilingInfo.Period.End",              "type": "date",   "label": "사업연도 종료" },
+        { "cell": "P2",  "target": "FilingInfo.FilingCe.KName",          "type": "string", "label": "법인명(상호)" },
+        { "cell": "P4",  "target": "FilingInfo.FilingCe.Tin.Value",      "type": "string", "label": "사업자등록번호" }
       ]
     },
     "1.1": {
       "description": "신고구성기업 정보",
       "mappings": [
-        { "cell": "B10", "target": "FilingInfo.FilingCe.Role",             "type": "enum:FilingCeRoleEnumType", "label": "1. 최종모기업 여부" },
-        { "cell": "D10", "target": "FilingInfo.FilingCe.Name",             "type": "string",                    "label": "2. 신고구성기업 상호" },
-        { "cell": "H10", "target": "FilingInfo.FilingCe.Tin.Value",        "type": "string",                    "label": "3. 납세자번호" },
-        { "cell": "K10", "target": "FilingInfo.FilingCe.Role",             "type": "enum:FilingCeRoleEnumType", "label": "4. 신고구성기업 지위" },
-        { "cell": "M10", "target": "FilingInfo.FilingCe.ResCountryCode",   "type": "enum:CountryCodeType",      "label": "5. 신고구성기업 소재지국" },
-        { "cell": "O10", "target": "GeneralSection.RecJurCode",            "type": "enum:CountryCodeType",      "label": "6. 연례 자동정보 교환당사국", "multi": true }
+        { "cell": "D9",  "target": "FilingInfo.FilingCe.Name",             "type": "string",                    "label": "2. 신고구성기업 상호" },
+        { "cell": "H9",  "target": "FilingInfo.FilingCe.Tin.Value",        "type": "string",                    "label": "3. 납세자번호" },
+        { "cell": "K9",  "target": "FilingInfo.FilingCe.Role",             "type": "enum:FilingCeRoleEnumType", "label": "4. 신고구성기업 지위" },
+        { "cell": "M9",  "target": "FilingInfo.FilingCe.ResCountryCode",   "type": "enum:CountryCodeType",      "label": "5. 신고구성기업 소재지국" },
+        { "cell": "O9",  "target": "GeneralSection.RecJurCode",            "type": "enum:CountryCodeType",      "label": "6. 연례 자동정보 교환당사국", "multi": true }
       ]
     },
     "1.2.1": {
       "description": "다국적기업그룹과 신고대상 사업연도",
       "mappings": [
-        { "cell": "B15", "target": "FilingInfo.NameMne",               "type": "string", "label": "1. 다국적기업그룹 명칭" },
-        { "cell": "F15", "target": "FilingInfo.Period.Start",          "type": "date",   "label": "2. 신고대상 사업연도 개시일" },
-        { "cell": "K15", "target": "FilingInfo.Period.End",            "type": "date",   "label": "3. 신고대상 사업연도 종료일" },
-        { "cell": "O15", "target": "MessageSpec.MessageTypeIndic",     "type": "enum:MessageTypeIndicEnumType", "label": "4. 수정신고서 여부" }
+        { "cell": "B14", "target": "FilingInfo.NameMne",               "type": "string", "label": "1. 다국적기업그룹 명칭" },
+        { "cell": "F14", "target": "FilingInfo.Period.Start",          "type": "date",   "label": "2. 신고대상 사업연도 개시일" },
+        { "cell": "K14", "target": "FilingInfo.Period.End",            "type": "date",   "label": "3. 신고대상 사업연도 종료일" },
+        { "cell": "O14", "target": "MessageSpec.MessageTypeIndic",     "type": "enum:MessageTypeIndicEnumType", "label": "4. 수정신고서 여부" }
       ]
     },
     "1.2.2": {
       "description": "다국적기업그룹 일반 회계정보",
       "mappings": [
-        { "cell": "B18", "target": "FilingInfo.AccountingInfo.CfSofUpe", "type": "enum:FilingCeCofUpeEnumType", "label": "1. 최종모기업 연결재무제표(유형)" },
-        { "cell": "H18", "target": "FilingInfo.AccountingInfo.Fas",      "type": "string",                      "label": "2. 최종모기업 연결재무제표 회계기준" },
-        { "cell": "M18", "target": "FilingInfo.AccountingInfo.Currency",  "type": "enum:CurrCodeType",           "label": "3. 최종모기업 연결재무제표 통화(ISO 코드)" }
+        { "cell": "B17", "target": "FilingInfo.AccountingInfo.CfSofUpe", "type": "enum:FilingCeCofUpeEnumType", "label": "1. 최종모기업 연결재무제표(유형)" },
+        { "cell": "H17", "target": "FilingInfo.AccountingInfo.Fas",      "type": "string",                      "label": "2. 최종모기업 연결재무제표 회계기준" },
+        { "cell": "M17", "target": "FilingInfo.AccountingInfo.Currency",  "type": "enum:CurrCodeType",           "label": "3. 최종모기업 연결재무제표 통화(ISO 코드)" }
       ]
     }
   }

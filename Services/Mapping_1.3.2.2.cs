@@ -13,7 +13,7 @@ namespace GlobeMapper.Services
             globe.GlobeBody.GeneralSection.CorporateStructure ??= new Globe.CorporateStructureType();
 
             var entity = new Globe.CorporateStructureTypeExcludedEntity();
-            globe.GlobeBody.GeneralSection.CorporateStructure.ExcludedEntity.Add(entity);
+            bool hasData = false;
 
             foreach (var (_, section) in Mapping.Sections)
             {
@@ -21,6 +21,7 @@ namespace GlobeMapper.Services
                 {
                     ForEachValue(ws, m, fileName, errors, val =>
                     {
+                        hasData = true;
                         switch (m.Target)
                         {
                             case "ExcludedEntity.Change":
@@ -35,6 +36,9 @@ namespace GlobeMapper.Services
                     });
                 }
             }
+
+            if (hasData)
+                globe.GlobeBody.GeneralSection.CorporateStructure.ExcludedEntity.Add(entity);
         }
     }
 }

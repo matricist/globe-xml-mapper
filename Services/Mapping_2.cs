@@ -11,8 +11,8 @@ namespace GlobeMapper.Services
     /// </summary>
     public class Mapping_2 : MappingBase
     {
-        private const int BLOCK1_START = 3;
-        private const int BLOCK1_SIZE = 21;  // 3~23
+        private const int BLOCK1_START = 2;
+        private const int BLOCK1_SIZE = 21;  // 2~22
         private const int GAP = 2;           // 24~25
         private const int BLOCK2_SIZE = 29;  // 26~54
         private const int SET_SIZE = 52;     // 21+2+29
@@ -39,14 +39,14 @@ namespace GlobeMapper.Services
         private void MapOneCountry(IXLWorksheet ws, Globe.GlobeOecd globe,
             List<string> errors, string fileName, int b1, int b2)
         {
-            // b1 기준 오프셋 (원본: 3행 기준)
-            // O6 = b1+3, O7 = b1+4, O8 = b1+5, O9 = b1+6, O10 = b1+7
-            // O15 = b1+12
-            // H19 = b1+16, N19 = b1+16, H20 = b1+17 ...
-            // b2 기준 (원본: 26행 기준)
-            // O28 = b2+2, O29 = b2+3, O30 = b2+4, O33 = b2+7
-            // E39 = b2+13, I39 = b2+13, ...
-            // M45 = b2+19, M46 = b2+20, M47 = b2+21, M48 = b2+22
+            // b1 기준 오프셋 (원본: 2행 기준)
+            // O5 = b1+3, O6 = b1+4, O7 = b1+5, O8 = b1+6, O9 = b1+7
+            // O14 = b1+12
+            // H18 = b1+16, N18 = b1+16, H19 = b1+17 ...
+            // b2 기준 (원본: 25행 기준)
+            // O27 = b2+2, O28 = b2+3, O29 = b2+4, O32 = b2+7
+            // E38 = b2+13, I38 = b2+13, ...
+            // M44 = b2+19, M45 = b2+20, M46 = b2+21, M47 = b2+22
 
             var jurCode = ws.Cell(b1 + 3, 15).GetString()?.Trim(); // O열=15
             if (string.IsNullOrEmpty(jurCode)) return;

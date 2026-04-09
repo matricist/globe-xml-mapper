@@ -49,16 +49,50 @@ namespace GlobeMapper.Services
             _app = Activator.CreateInstance(excelType);
             _app.Visible = true;
 
-            // Workbooks 컬렉션을 변수에 받아 명시적으로 해제 (숨은 COM 객체 방지)
             dynamic workbooks = _app.Workbooks;
             _workbook = workbooks.Open(path);
             Marshal.ReleaseComObject(workbooks);
 
-            // 첫 번째 시트로 이동 (메타 시트 생성 전 위치 기억)
             var firstSheet = _workbook.Sheets[1];
             EnsureMetaSheet();
-            // 메타 시트 생성 후 원래 시트로 복귀
             ((dynamic)firstSheet).Activate();
+        }
+
+        // oleaut32.dll의 GetActiveObject 직접 호출 (Marshal.GetActiveObject는 .NET Core에서 제거됨)
+        [System.Runtime.InteropServices.DllImport("oleaut32.dll")]
+        private static extern void GetActiveObjectNative(
+            ref Guid rclsid,
+            IntPtr pvReserved,
+            [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.IUnknown)]
+            out object ppunk);
+
+        // Excel.Application CLSID (버전 무관 공통)
+        private static readonly Guid ExcelClsid = new Guid("00024500-0000-0000-C000-000000000046");
+
+        /// <summary>
+        /// 이미 열려 있는 Excel 인스턴스의 활성 워크북에 연결.
+        /// 사용자가 직접 Excel에서 파일을 열고 이 메서드를 호출.
+        /// </summary>
+        public void AttachToActive()
+        {
+            try
+            {
+                var clsid = ExcelClsid;
+                GetActiveObjectNative(ref clsid, IntPtr.Zero, out object obj);
+                _app = obj;
+            }
+            catch (Exception ex) when (!(ex is InvalidOperationException))
+            {
+                throw new InvalidOperationException(
+                    "실행 중인 Excel 인스턴스를 찾을 수 없습니다.\nExcel에서 파일을 먼저 열어주세요.", ex);
+            }
+
+            _workbook = _app.ActiveWorkbook;
+            if (_workbook == null)
+                throw new InvalidOperationException(
+                    "열려 있는 Excel 통합문서가 없습니다.\nExcel에서 파일을 열고 다시 시도하세요.");
+
+            EnsureMetaSheet();
         }
 
         public void CreateNew(string templatePath, string savePath)
@@ -104,15 +138,52 @@ namespace GlobeMapper.Services
         #region 시트 내 행 블록 반복 (1.3.1 UPE)
 
         /// <summary>
-        /// 시트 내 행 블록을 복제하여 아래에 추가.
-        /// sourceStartRow~sourceEndRow를 복사하여 현재 마지막 블록 + gap행 뒤에 삽입.
+        /// B열에서 header 텍스트를 포함하는 행 번호 목록 반환.
+        /// blockHeader 기반 탐지에 사용.
         /// </summary>
-        public void AddRowBlock(string sheetName, int sourceStartRow, int sourceEndRow, int gap)
+        private List<int> FindBlockHeaderRows(dynamic ws, string header)
+        {
+            var result = new List<int>();
+            int lastRow;
+            try { lastRow = (int)ws.UsedRange.Row + (int)ws.UsedRange.Rows.Count; }
+            catch { lastRow = 500; }
+
+            for (int r = 1; r <= lastRow; r++)
+            {
+                string val = ws.Cells[r, 2].Value?.ToString()?.Trim();
+                if (val != null && val.Contains(header))
+                    result.Add(r);
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// 시트 내 행 블록을 복제하여 아래에 추가.
+        /// blockHeader 지정 시 B열 헤더 스캔으로 마지막 블록 위치를 동적 탐지.
+        /// blockHeader 미지정 시 _META blockCount 기반.
+        /// </summary>
+        public void AddRowBlock(string sheetName, int sourceStartRow, int sourceEndRow, int gap,
+            int dataColStart = 15, int dataColEnd = 18, string blockHeader = null)
         {
             dynamic ws = _workbook.Sheets[sheetName];
             var blockSize = sourceEndRow - sourceStartRow + 1;
-            var count = GetMetaInt(sheetName, "blockCount", 1);
-            var insertRow = sourceEndRow + 1 + (count - 1) * (blockSize + gap) + gap;
+
+            int insertRow;
+            int count;
+
+            if (blockHeader != null)
+            {
+                var headerRows = FindBlockHeaderRows(ws, blockHeader);
+                count = headerRows.Count;
+                var lastStart = count > 0 ? headerRows[count - 1] : sourceStartRow;
+                var lastEnd = lastStart + (sourceEndRow - sourceStartRow);
+                insertRow = lastEnd + 1 + gap;
+            }
+            else
+            {
+                count = GetMetaInt(sheetName, "blockCount", 1);
+                insertRow = sourceEndRow + 1 + (count - 1) * (blockSize + gap) + gap;
+            }
 
             // 빈 행 삽입
             dynamic insertRange = ws.Rows[$"{insertRow}:{insertRow + blockSize - 1}"];
@@ -121,7 +192,7 @@ namespace GlobeMapper.Services
             // 원본 블록 복사
             dynamic sourceRange = ws.Range[
                 ws.Cells[sourceStartRow, 1],
-                ws.Cells[sourceEndRow, 18]  // R열 = 18
+                ws.Cells[sourceEndRow, 18]
             ];
             dynamic destRange = ws.Range[
                 ws.Cells[insertRow, 1],
@@ -132,29 +203,51 @@ namespace GlobeMapper.Services
             // 행 높이 복사
             for (int i = 0; i < blockSize; i++)
             {
-                ws.Rows[insertRow + i].RowHeight = (double)ws.Rows[sourceStartRow + i].RowHeight;
+                try
+                {
+                    var srcH = ws.Rows[sourceStartRow + i].RowHeight;
+                    if (srcH != null)
+                        ws.Rows[insertRow + i].RowHeight = (double)srcH;
+                }
+                catch { }
             }
 
             // 데이터 셀 초기화 (값만 지우기, 서식 유지)
-            ClearDataCells(ws, insertRow, insertRow + blockSize - 1);
+            ClearDataCells(ws, insertRow, insertRow + blockSize - 1, dataColStart, dataColEnd);
 
-            SetMetaInt(sheetName, "blockCount", count + 1);
+            if (blockHeader == null)
+                SetMetaInt(sheetName, "blockCount", count + 1);
         }
 
         /// <summary>
         /// 마지막 행 블록 삭제.
+        /// blockHeader 지정 시 B열 헤더 스캔으로 마지막 블록 위치를 동적 탐지.
         /// </summary>
-        public bool RemoveRowBlock(string sheetName, int sourceStartRow, int sourceEndRow, int gap)
+        public bool RemoveRowBlock(string sheetName, int sourceStartRow, int sourceEndRow, int gap,
+            string blockHeader = null)
         {
-            var count = GetMetaInt(sheetName, "blockCount", 1);
-            if (count <= 1) return false;
-
             dynamic ws = _workbook.Sheets[sheetName];
             var blockSize = sourceEndRow - sourceStartRow + 1;
-            var lastBlockStart = sourceEndRow + 1 + (count - 2) * (blockSize + gap) + gap;
-            var lastBlockEnd = lastBlockStart + blockSize - 1;
 
-            // gap행 포함 삭제
+            int count;
+            int lastBlockStart, lastBlockEnd;
+
+            if (blockHeader != null)
+            {
+                var headerRows = FindBlockHeaderRows(ws, blockHeader);
+                count = headerRows.Count;
+                if (count <= 1) return false;
+                lastBlockStart = headerRows[count - 1];
+                lastBlockEnd = lastBlockStart + (sourceEndRow - sourceStartRow);
+            }
+            else
+            {
+                count = GetMetaInt(sheetName, "blockCount", 1);
+                if (count <= 1) return false;
+                lastBlockStart = sourceEndRow + 1 + (count - 2) * (blockSize + gap) + gap;
+                lastBlockEnd = lastBlockStart + blockSize - 1;
+            }
+
             _app.DisplayAlerts = false;
             try
             {
@@ -166,59 +259,88 @@ namespace GlobeMapper.Services
                 _app.DisplayAlerts = true;
             }
 
-            SetMetaInt(sheetName, "blockCount", count - 1);
+            if (blockHeader == null)
+                SetMetaInt(sheetName, "blockCount", count - 1);
             return true;
         }
 
         /// <summary>
         /// 시트를 원래 상태로 초기화 (추가된 블록 모두 제거 + 데이터 초기화).
+        /// blockHeader 지정 시 B열 헤더 스캔 사용.
         /// </summary>
-        public void ResetSheet(string sheetName, int sourceStartRow, int sourceEndRow, int gap)
+        public void ResetSheet(string sheetName, int sourceStartRow, int sourceEndRow, int gap,
+            int dataColStart = 15, int dataColEnd = 18, string blockHeader = null)
         {
-            var count = GetMetaInt(sheetName, "blockCount", 1);
-
-            if (count > 1)
+            if (blockHeader != null)
             {
+                // 헤더 탐색 없이 sourceEndRow+1 ~ lastUsed 전체 삭제.
+                // 어떤 상태(블록이 내부에 삽입됐든, 헤더가 없든)에서도 확실히 초기화.
                 dynamic ws = _workbook.Sheets[sheetName];
-                var blockSize = sourceEndRow - sourceStartRow + 1;
-                var firstExtraRow = sourceEndRow + 1 + gap;
-                var lastRow = sourceEndRow + (count - 1) * (blockSize + gap);
+                int deleteFrom = sourceEndRow + 1;
+                int lastUsed;
+                try { lastUsed = (int)ws.UsedRange.Row + (int)ws.UsedRange.Rows.Count - 1; }
+                catch { lastUsed = deleteFrom + 300; }
 
-                _app.DisplayAlerts = false;
-                try
+                if (deleteFrom <= lastUsed)
                 {
-                    dynamic deleteRange = ws.Rows[$"{firstExtraRow}:{lastRow}"];
-                    deleteRange.Delete();
-                }
-                finally
-                {
-                    _app.DisplayAlerts = true;
+                    _app.DisplayAlerts = false;
+                    try
+                    {
+                        dynamic deleteRange = ws.Rows[$"{deleteFrom}:{lastUsed}"];
+                        deleteRange.Delete();
+                    }
+                    finally { _app.DisplayAlerts = true; }
                 }
             }
+            else
+            {
+                var count = GetMetaInt(sheetName, "blockCount", 1);
+                if (count > 1)
+                {
+                    dynamic ws = _workbook.Sheets[sheetName];
+                    var blockSize = sourceEndRow - sourceStartRow + 1;
+                    var firstExtraRow = sourceEndRow + 1 + gap;
+                    var lastRow = sourceEndRow + (count - 1) * (blockSize + gap);
 
-            // 원본 블록 데이터도 초기화
+                    _app.DisplayAlerts = false;
+                    try
+                    {
+                        dynamic deleteRange = ws.Rows[$"{firstExtraRow}:{lastRow}"];
+                        deleteRange.Delete();
+                    }
+                    finally { _app.DisplayAlerts = true; }
+                }
+                SetMetaInt(sheetName, "blockCount", 1);
+            }
+
+            // 첫 번째 블록 데이터 초기화
             dynamic sheet = _workbook.Sheets[sheetName];
-            ClearDataCells(sheet, sourceStartRow, sourceEndRow);
-
-            SetMetaInt(sheetName, "blockCount", 1);
+            ClearDataCells(sheet, sourceStartRow, sourceEndRow, dataColStart, dataColEnd);
         }
 
-        public int GetRowBlockCount(string sheetName)
+        /// <summary>
+        /// blockHeader 지정 시 B열 헤더 스캔으로 블록 수 반환, 미지정 시 _META 사용.
+        /// </summary>
+        public int GetRowBlockCount(string sheetName, int defaultCount = 1, string blockHeader = null)
         {
-            return GetMetaInt(sheetName, "blockCount", 1);
+            if (blockHeader != null)
+            {
+                dynamic ws = _workbook.Sheets[sheetName];
+                return FindBlockHeaderRows(ws, blockHeader).Count;
+            }
+            return GetMetaInt(sheetName, "blockCount", defaultCount);
         }
 
-        private void ClearDataCells(dynamic ws, int startRow, int endRow)
+        private void ClearDataCells(dynamic ws, int startRow, int endRow,
+            int dataColStart = 15, int dataColEnd = 18)
         {
-            // O열~R열 (15~18)의 데이터 셀만 값 초기화 (서식 유지)
             for (int r = startRow; r <= endRow; r++)
             {
-                for (int c = 15; c <= 18; c++)
+                for (int c = dataColStart; c <= dataColEnd; c++)
                 {
                     dynamic cell = ws.Cells[r, c];
                     if (cell.MergeCells)
                     {
-                        // 병합 셀의 첫 번째 셀만 처리
                         dynamic mergeArea = cell.MergeArea;
                         if ((int)mergeArea.Row == r && (int)mergeArea.Column == c)
                             mergeArea.ClearContents();
@@ -298,27 +420,26 @@ namespace GlobeMapper.Services
 
         #region CE 블록 + 첨부 시트 연동
 
-        private const int CE_BLOCK_START = 4;
-        private const int CE_BLOCK_END = 21;
+        private const int CE_BLOCK_START = 3;
+        private const int CE_BLOCK_END = 21;  // row 3~21 = 19행 (기존 20은 오류)
         private const int CE_BLOCK_GAP = 2;
-        private const int CE_ATTACH_REF_ROW_OFFSET = 10; // 블록 내 O14 = 시작행+10
+        private const int CE_ATTACH_REF_ROW_OFFSET = 8; // 블록 내 O11 = 시작행+8
 
         /// <summary>
-        /// CE 블록 추가: 시트2에서 행 블록 복제 + 별첨 시트에 섹션 추가.
+        /// CE 블록 추가: 행 블록 복제(헤더 기반) + 첨부N 셀 갱신 + 별첨 시트 섹션 추가.
         /// </summary>
         public void AddCeBlock(string ceSheetName, string attachSheetName)
         {
-            // 1. 행 블록 복제
-            AddRowBlock(ceSheetName, CE_BLOCK_START, CE_BLOCK_END, CE_BLOCK_GAP);
+            // 1. 헤더 기반으로 행 블록 복제
+            AddRowBlock(ceSheetName, CE_BLOCK_START, CE_BLOCK_END, CE_BLOCK_GAP,
+                blockHeader: "1.3.2.1");
 
-            var count = GetRowBlockCount(ceSheetName);
-            var blockSize = CE_BLOCK_END - CE_BLOCK_START + 1;
-
-            // 2. 새 블록의 O14셀을 "별첨N"으로 갱신
+            // 2. 삽입 후 헤더 재스캔 → 새 블록 시작행 확인
             dynamic ws = _workbook.Sheets[ceSheetName];
-            var newBlockStart = CE_BLOCK_END + 1 + (count - 2) * (blockSize + CE_BLOCK_GAP) + CE_BLOCK_GAP;
-            var refRow = newBlockStart + CE_ATTACH_REF_ROW_OFFSET;
-            ws.Cells[refRow, 15] = $"첨부{count}"; // O열 = 15
+            var headerRows = FindBlockHeaderRows(ws, "1.3.2.1");
+            var count = headerRows.Count;
+            var newBlockStart = headerRows[count - 1];
+            ws.Cells[newBlockStart + CE_ATTACH_REF_ROW_OFFSET, 15] = $"첨부{count}";
 
             // 3. 별첨 시트에 섹션 추가
             AddAttachSection(attachSheetName, count);
@@ -329,10 +450,12 @@ namespace GlobeMapper.Services
         /// </summary>
         public bool RemoveCeBlock(string ceSheetName, string attachSheetName)
         {
-            var count = GetRowBlockCount(ceSheetName);
+            dynamic ws = _workbook.Sheets[ceSheetName];
+            var count = FindBlockHeaderRows(ws, "1.3.2.1").Count;
             if (count <= 1) return false;
 
-            RemoveRowBlock(ceSheetName, CE_BLOCK_START, CE_BLOCK_END, CE_BLOCK_GAP);
+            RemoveRowBlock(ceSheetName, CE_BLOCK_START, CE_BLOCK_END, CE_BLOCK_GAP,
+                blockHeader: "1.3.2.1");
             RemoveAttachSection(attachSheetName, count);
             return true;
         }
@@ -342,22 +465,23 @@ namespace GlobeMapper.Services
         /// </summary>
         public void ResetCeSheet(string ceSheetName, string attachSheetName)
         {
-            var count = GetRowBlockCount(ceSheetName);
+            dynamic ws = _workbook.Sheets[ceSheetName];
+            var count = FindBlockHeaderRows(ws, "1.3.2.1").Count;
 
-            // 별첨 시트 초기화: 별첨2 이후 모두 삭제
             if (count > 1)
-            {
                 for (int i = count; i >= 2; i--)
                     RemoveAttachSection(attachSheetName, i);
-            }
-            // 별첨1 데이터 행 초기화
             ResetAttachSection(attachSheetName, 1);
 
-            // CE 시트 초기화
-            ResetSheet(ceSheetName, CE_BLOCK_START, CE_BLOCK_END, CE_BLOCK_GAP);
+            ResetSheet(ceSheetName, CE_BLOCK_START, CE_BLOCK_END, CE_BLOCK_GAP,
+                blockHeader: "1.3.2.1");
         }
 
-        public int GetCeBlockCount(string ceSheetName) => GetRowBlockCount(ceSheetName);
+        public int GetCeBlockCount(string ceSheetName)
+        {
+            dynamic ws = _workbook.Sheets[ceSheetName];
+            return FindBlockHeaderRows(ws, "1.3.2.1").Count;
+        }
 
         #endregion
 
@@ -558,12 +682,11 @@ namespace GlobeMapper.Services
 
         #endregion
 
-        #region 시트3 대형 블록 (3~228, 페이지번호 행 제외)
+        #region 시트3 대형 블록 (2~219, 페이지번호 행 삭제됨)
 
-        // 페이지번호 행 (복사에서 제외)
-        private static readonly int[] S3_PAGE_ROWS = { 2, 31, 64, 92, 119, 141, 162, 184, 205 };
-        private const int S3_BLOCK_START = 3;
-        private const int S3_BLOCK_END = 228;
+        // 페이지번호 행이 템플릿에서 삭제되었으므로 더 이상 사용하지 않음
+        private const int S3_BLOCK_START = 2;
+        private const int S3_BLOCK_END = 219;
         private const int S3_PAGE_GAP = 2; // 페이지 간 간격
 
         public void AddSheet3Page(string sheetName)
@@ -583,18 +706,6 @@ namespace GlobeMapper.Services
             // 행 높이 복사
             for (int i = 0; i < blockSize; i++)
                 ws.Rows[insertRow + i].RowHeight = (double)ws.Rows[S3_BLOCK_START + i].RowHeight;
-
-            // 페이지번호 행 삭제 (새 블록 내에서)
-            foreach (var pageRow in S3_PAGE_ROWS)
-            {
-                var offset = pageRow - S3_BLOCK_START;
-                if (offset >= 0 && offset < blockSize)
-                {
-                    var targetRow = insertRow + offset;
-                    // 페이지번호 셀(R열) 값만 삭제
-                    ws.Cells[targetRow, 18].ClearContents();
-                }
-            }
 
             // 데이터 셀 초기화
             ClearDataCells(ws, insertRow, insertRow + blockSize - 1);
@@ -701,12 +812,12 @@ namespace GlobeMapper.Services
 
         #region 시트2 복합 블록 (3~23 + 26~54)
 
-        // 시트2는 블록1(3~23) + 간격(24~25) + 블록2(26~54) = 총 52행이 한 세트
-        private const int S2_BLOCK1_START = 3;
-        private const int S2_BLOCK1_END = 23;
-        private const int S2_GAP_ROWS = 2;  // 24~25행 (간격)
-        private const int S2_BLOCK2_START = 26;
-        private const int S2_BLOCK2_END = 54;
+        // 시트2는 블록1(2~22) + 간격(23~24) + 블록2(25~53) = 총 52행이 한 세트
+        private const int S2_BLOCK1_START = 2;
+        private const int S2_BLOCK1_END = 22;
+        private const int S2_GAP_ROWS = 2;  // 23~24행 (간격)
+        private const int S2_BLOCK2_START = 25;
+        private const int S2_BLOCK2_END = 53;
         private const int S2_TOTAL_SIZE = 52; // (23-3+1) + 2 + (54-26+1)
         private const int S2_INSERT_GAP = 2;  // 세트 간 간격
 
@@ -868,10 +979,10 @@ namespace GlobeMapper.Services
         /// <summary>
         /// 메타 blockCount 기반 단순 행 추가. firstDataRow의 서식 복사.
         /// </summary>
-        public void AddSimpleRowByMeta(string sheetName, int firstDataRow)
+        public void AddSimpleRowByMeta(string sheetName, int firstDataRow, int defaultCount = 1)
         {
             dynamic ws = _workbook.Sheets[sheetName];
-            var count = GetMetaInt(sheetName, "blockCount", 1);
+            var count = GetMetaInt(sheetName, "blockCount", defaultCount);
             var insertRow = firstDataRow + count;
 
             dynamic templateRow = ws.Rows[firstDataRow];
@@ -888,10 +999,10 @@ namespace GlobeMapper.Services
             SetMetaInt(sheetName, "blockCount", count + 1);
         }
 
-        public bool RemoveSimpleRowByMeta(string sheetName, int firstDataRow)
+        public bool RemoveSimpleRowByMeta(string sheetName, int firstDataRow, int defaultCount = 1)
         {
-            var count = GetMetaInt(sheetName, "blockCount", 1);
-            if (count <= 1) return false;
+            var count = GetMetaInt(sheetName, "blockCount", defaultCount);
+            if (count <= defaultCount) return false;
 
             dynamic ws = _workbook.Sheets[sheetName];
             var lastRow = firstDataRow + count - 1;
@@ -908,56 +1019,79 @@ namespace GlobeMapper.Services
 
         #region 메타 시트 관리
 
+        internal static readonly (string section, string sheetName)[] SheetMap = new[]
+        {
+            ("1.1~1.2",     "다국적기업그룹 정보"),
+            ("1.3.1",       "최종모기업"),
+            ("1.3.2.1",     "그룹구조"),
+            ("1.3.2.2",     "제외기업"),
+            ("1.3.3",       "그룹구조 변동"),
+            ("1.4",         "요약"),
+            ("2",           "적용면제"),
+            ("3.1~3.2.3.2", "3.1~3.2.3.2"),
+        };
+
         private void EnsureMetaSheet()
         {
-            if (GetMetaSheet() != null) return;
+            dynamic meta = GetMetaSheet();
 
-            dynamic lastSheet = _workbook.Sheets[_workbook.Sheets.Count];
-            dynamic newSheet = _workbook.Sheets.Add(After: lastSheet);
-            newSheet.Name = MetaSheetName;
-            newSheet.Visible = -1; // xlSheetVeryHidden
+            if (meta == null)
+            {
+                dynamic lastSheet = _workbook.Sheets[_workbook.Sheets.Count];
+                meta = _workbook.Sheets.Add(After: lastSheet);
+                meta.Name = MetaSheetName;
+                meta.Visible = -1; // xlSheetVeryHidden
+                meta.Cells[1, 1] = "key";
+                meta.Cells[1, 2] = "value";
+            }
 
-            newSheet.Cells[1, 1] = "key";
-            newSheet.Cells[1, 2] = "value";
+            // 기존 blockCount 값 보존
+            var savedBlockCounts = new Dictionary<string, int>();
+            var r = 2;
+            while (true)
+            {
+                var k = (string)meta.Cells[r, 1].Value?.ToString();
+                if (string.IsNullOrEmpty(k)) break;
+                if (k.StartsWith("blockCount:"))
+                {
+                    var name = k.Substring(11);
+                    if (int.TryParse((string)meta.Cells[r, 2].Value?.ToString(), out var cnt))
+                        savedBlockCounts[name] = cnt;
+                }
+                r++;
+            }
 
+            // 헤더 이후 전체 초기화
+            for (var clearRow = 2; clearRow < r + 1; clearRow++)
+            {
+                meta.Cells[clearRow, 1] = "";
+                meta.Cells[clearRow, 2] = "";
+            }
+
+            // sheet: 항목 재작성 (실제 존재하는 시트만)
             var row = 2;
-
-            // 시트 이름 기반 매핑 초기값
-            var sheetMap = new (string section, string sheetName)[]
+            foreach (var (section, name) in SheetMap)
             {
-                ("1.1~1.2", "1.1~1.2"),
-                ("1.3.1",   "1.3.1"),
-                ("1.3.2.1", "1.3.2.1"),
-                ("1.3.2.2", "1.3.2.2"),
-                ("1.3.3",   "1.3.3"),
-                ("1.4",     "1.4"),
-                ("2",       "2"),
-                ("3.1~3.2.3.2", "3.1~3.2.3.2"),
-            };
-
-            foreach (var (section, name) in sheetMap)
-            {
-                // 시트가 실제로 존재하는지 확인
                 bool exists = false;
                 try { var _ = _workbook.Sheets[name]; exists = true; } catch { }
                 if (exists)
                 {
-                    newSheet.Cells[row, 1] = $"sheet:{section}";
-                    newSheet.Cells[row, 2] = name;
+                    meta.Cells[row, 1] = $"sheet:{section}";
+                    meta.Cells[row, 2] = name;
                     row++;
                 }
             }
 
-            // 행 블록 카운트 초기값 (1.3.1, 1.3.2.1, 1.3.2.2)
-            var blockSheets = new[] { "1.3.1", "1.3.2.1", "1.3.2.2", "1.3.3", "1.4", "2", "3.1~3.2.3.2" };
+            // blockCount: 항목 재작성 (보존된 값 또는 1)
+            var blockSheets = new[] { "최종모기업", "그룹구조", "제외기업", "그룹구조 변동", "요약", "적용면제", "3.1~3.2.3.2" };
             foreach (var name in blockSheets)
             {
                 bool exists = false;
                 try { var _ = _workbook.Sheets[name]; exists = true; } catch { }
                 if (exists)
                 {
-                    newSheet.Cells[row, 1] = $"blockCount:{name}";
-                    newSheet.Cells[row, 2] = 1;
+                    meta.Cells[row, 1] = $"blockCount:{name}";
+                    meta.Cells[row, 2] = savedBlockCounts.TryGetValue(name, out var cnt) ? cnt : 1;
                     row++;
                 }
             }

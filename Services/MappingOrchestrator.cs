@@ -15,7 +15,7 @@ namespace GlobeMapper.Services
             { "1.3.1",    () => new Mapping_1_3_1() },
             { "1.3.2.1",  () => new Mapping_1_3_2_1() },
             { "1.3.2.2",  () => new Mapping_1_3_2_2() },
-            // 1.3.3은 XML에 포함하지 않음 (AdditionalDataPoint 미사용)
+            { "1.3.3",    () => new Mapping_1_3_3() },
             { "1.4",      () => new Mapping_1_4() },
             { "2",        () => new Mapping_2() },
         };
@@ -30,25 +30,13 @@ namespace GlobeMapper.Services
 
             using var workbook = new XLWorkbook(filePath);
 
-            // _META 시트에서 섹션-시트 매핑 읽기
-            if (!workbook.TryGetWorksheet(ExcelController.MetaSheetName, out var metaWs))
-            {
-                errors.Add("_META 숨김시트를 찾을 수 없습니다. Control Panel에서 파일을 먼저 열어주세요.");
-                return errors;
-            }
-
-            var mappings = ExcelController.ReadSheetMappings(metaWs);
-
-            foreach (var (section, sheetName) in mappings)
+            foreach (var (section, sheetName) in ExcelController.SheetMap)
             {
                 if (!MapperFactory.TryGetValue(section, out var createMapper))
                     continue; // 매퍼 없는 섹션은 스킵 (1.3.3 등 XML 미포함)
 
                 if (!workbook.TryGetWorksheet(sheetName, out var ws))
-                {
-                    errors.Add($"시트 '{sheetName}'을(를) 찾을 수 없습니다. (섹션: {section})");
-                    continue;
-                }
+                    continue; // 시트가 없으면 해당 섹션은 건너뜀
 
                 var mapper = createMapper();
                 mapper.Map(ws, globe, errors, sheetName);
@@ -60,50 +48,66 @@ namespace GlobeMapper.Services
 
         /// <summary>
         /// 프로젝트 폴더 기반 매핑.
-        /// 구조: root/main.xlsx + root/{n}/Group.xlsx + root/{n}/CE_*.xlsx
+        /// 구조:
+        ///   root/MNE*.xlsx              → 1.x, 2 섹션 (최종모기업 파일)
+        ///   root/합산단위_N/합산단위_N.xlsx → 합산단위별 매핑
+        ///   root/구성기업_N.xlsx          → 구성기업별 매핑
         /// </summary>
         public List<string> MapFolder(string rootPath, Globe.GlobeOecd globe)
         {
             var errors = new List<string>();
 
-            // ── main.xlsx: _META 기반 매핑 (1.x, 2, 3.4.3 섹션) ──────────
-            var mainPath = Path.Combine(rootPath, "main.xlsx");
-            if (!File.Exists(mainPath))
-            {
-                errors.Add($"main.xlsx를 찾을 수 없습니다. ({rootPath})");
-                return errors;
-            }
-            var mainErrors = MapWorkbook(mainPath, globe);
-            errors.AddRange(mainErrors);
-
-            // ── 숫자 폴더: Group.xlsx + CE_*.xlsx ──────────────────────────
-            var countryDirs = Directory.GetDirectories(rootPath)
-                .Where(d => int.TryParse(Path.GetFileName(d), out _))
-                .OrderBy(d => int.Parse(Path.GetFileName(d)))
+            // ── MNE 파일 (루트의 xlsx 중 임시파일 제외, 첫 번째) ─────────
+            var mneFiles = Directory.GetFiles(rootPath, "*.xlsx", SearchOption.TopDirectoryOnly)
+                .Where(f => !Path.GetFileName(f).StartsWith("~$"))
+                .OrderBy(f => f)
                 .ToList();
 
-            foreach (var dir in countryDirs)
+            if (mneFiles.Count == 0)
+            {
+                errors.Add($"루트 폴더에 xlsx 파일이 없습니다. ({rootPath})");
+                return errors;
+            }
+            if (mneFiles.Count > 1)
+                errors.Add($"루트 폴더에 xlsx 파일이 여러 개입니다. 첫 번째 파일만 사용합니다: {Path.GetFileName(mneFiles[0])}");
+
+            errors.AddRange(MapWorkbook(mneFiles[0], globe));
+
+            // ── 합산단위_N 하위 디렉터리 ──────────────────────────────────
+            var groupDirs = Directory.GetDirectories(rootPath, "합산단위_*")
+                .OrderBy(d => NaturalOrder(Path.GetFileName(d)))
+                .ToList();
+
+            foreach (var dir in groupDirs)
             {
                 var dirName = Path.GetFileName(dir);
-
-                // Group.xlsx
-                var groupPath = Path.Combine(dir, "Group.xlsx");
-                if (File.Exists(groupPath))
-                    MapFileBySheets(groupPath, globe, errors);
-                else
-                    errors.Add($"[{dirName}] Group.xlsx 없음");
-
-                // CE_N.xlsx
-                var ceFiles = Directory.GetFiles(dir, "CE_*.xlsx")
+                var xlsxFiles = Directory.GetFiles(dir, "*.xlsx", SearchOption.TopDirectoryOnly)
                     .Where(f => !Path.GetFileName(f).StartsWith("~$"))
                     .OrderBy(f => f)
                     .ToList();
-                foreach (var ceFile in ceFiles)
-                    MapFileBySheets(ceFile, globe, errors);
+                if (xlsxFiles.Count == 0)
+                { errors.Add($"[{dirName}] xlsx 파일 없음"); continue; }
+                foreach (var f in xlsxFiles)
+                    MapFileBySheets(f, globe, errors);
             }
+
+            // ── 구성기업_N.xlsx ───────────────────────────────────────────
+            var ceFiles = Directory.GetFiles(rootPath, "구성기업_*.xlsx", SearchOption.TopDirectoryOnly)
+                .Where(f => !Path.GetFileName(f).StartsWith("~$"))
+                .OrderBy(f => NaturalOrder(Path.GetFileName(f)))
+                .ToList();
+
+            foreach (var f in ceFiles)
+                MapFileBySheets(f, globe, errors);
 
             FillMessageSpec(globe);
             return errors;
+        }
+
+        private static int NaturalOrder(string name)
+        {
+            var digits = System.Text.RegularExpressions.Regex.Match(name, @"\d+$");
+            return digits.Success ? int.Parse(digits.Value) : 0;
         }
 
         /// <summary>

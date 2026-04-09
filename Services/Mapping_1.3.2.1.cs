@@ -5,17 +5,13 @@ namespace GlobeMapper.Services
 {
     public class Mapping_1_3_2_1 : MappingBase
     {
-        // CE 블록 정의 (시트2 기준)
-        private const int BLOCK_START = 4;
-        private const int BLOCK_END = 21;
-        private const int BLOCK_GAP = 2;
-        private const int BLOCK_SIZE = BLOCK_END - BLOCK_START + 1; // 18행
+        // 헤더 검색 키워드 (B열에서 이 문자열을 포함하는 행 = 블록 시작)
+        private const string BLOCK_HEADER = "1.3.2.1";
 
-        // 블록 내 상대 오프셋 (행 번호 - BLOCK_START)
-        // O5=변동(+1), O6=소재지국(+2), O7=규칙(+3), O8=상호(+4), O9=TIN(+5),
-        // O10=접수TIN(+6), O11=기업유형(+7), O14=별첨참조(+10),
-        // O16=모기업유형(+12), O17=QIIR TIN(+13), O18=부분소유TIN(+14),
-        // O19=QUTPR초기(+15), O20=소유합계(+16), O21=UPE소유(+17)
+        // 블록 내 상대 오프셋 (헤더 행 기준)
+        // +1=변동, +2=소재지국, +3=규칙, +4=상호, +5=TIN,
+        // +6=접수TIN, +7=기업유형, +12=모기업유형, +13=QIIR TIN,
+        // +14=부분소유TIN, +15=QUTPR초기, +16=소유합계, +17=UPE소유
         private static readonly (int Offset, string Target)[] FieldMap =
         {
             (1, "Ce.ChangeFlag"),
@@ -34,7 +30,7 @@ namespace GlobeMapper.Services
         };
 
         // 별첨 시트 이름
-        private const string ATTACH_SHEET = "1.3.2.1 첨부";
+        private const string ATTACH_SHEET = "그룹구조 첨부";
 
         public Mapping_1_3_2_1()
             : base("mapping_1.3.2.1.json") { }
@@ -51,17 +47,14 @@ namespace GlobeMapper.Services
                 new Globe.CorporateStructureType();
             var cs = globe.GlobeBody.GeneralSection.CorporateStructure;
 
-            // _META에서 CE 블록 수 읽기
-            var blockCount = 1;
-            if (ws.Workbook.TryGetWorksheet(ExcelController.MetaSheetName, out var metaWs))
-                blockCount = ExcelController.ReadBlockCount(metaWs, ws.Name);
+            // 헤더 행 위치를 동적으로 검색
+            var blockStartRows = FindBlockStartRows(ws);
 
-            // CE 블록 순회
-            for (int blockIdx = 0; blockIdx < blockCount; blockIdx++)
+            for (int blockIdx = 0; blockIdx < blockStartRows.Count; blockIdx++)
             {
-                var blockStartRow = BLOCK_START + blockIdx * (BLOCK_SIZE + BLOCK_GAP);
+                var blockStartRow = blockStartRows[blockIdx];
                 var ce = new Globe.CorporateStructureTypeCe { Id = new Globe.IdType() };
-                cs.Ce.Add(ce);
+                bool hasData = false;
 
                 // 블록 내 필드 매핑
                 foreach (var (offset, target) in FieldMap)
@@ -71,7 +64,7 @@ namespace GlobeMapper.Services
                     if (string.IsNullOrEmpty(cellValue))
                         continue;
 
-                    // multi 처리 (쉼표 구분)
+                    hasData = true;
                     var isMulti = target is "Ce.Id.Rules" or "Ce.Id.GlobeStatus";
                     var values = isMulti
                         ? cellValue.Split(
@@ -85,9 +78,11 @@ namespace GlobeMapper.Services
                         SetCeValue(ce, cs, target, val, errors, fileName, row);
                 }
 
-                // 별첨에서 소유지분 읽기
-                var attachNum = blockIdx + 1;
-                MapOwnershipFromAttach(ws.Workbook, ce, attachNum, errors, fileName);
+                // 별첨에서 소유지분 읽기 (블록 순서 = 별첨 번호)
+                MapOwnershipFromAttach(ws.Workbook, ce, blockIdx + 1, errors, fileName);
+
+                if (hasData)
+                    cs.Ce.Add(ce);
             }
         }
 
@@ -131,17 +126,10 @@ namespace GlobeMapper.Services
                     ce.Id.Name = val;
                     break;
                 case "Ce.Id.Tin.Value":
-                    ce.Id.Tin.Add(new Globe.TinType { Value = val });
+                    ce.Id.Tin.Add(ParseTin(val));
                     break;
                 case "Ce.Id.ReceivingTin":
-                    ce.Id.Tin.Add(
-                        new Globe.TinType
-                        {
-                            Value = val,
-                            IssuedBy = Globe.CountryCodeType.Kr,
-                            IssuedBySpecified = true,
-                        }
-                    );
+                    ce.Id.Tin.Add(ParseTin(val));
                     break;
                 case "Ce.Id.GlobeStatus":
                     SetEnum<Globe.IdTypeGloBeStatusEnumType>(
@@ -165,9 +153,10 @@ namespace GlobeMapper.Services
                 case "Ce.Qiir.Exception.Tin.Value":
                     ce.Qiir ??= new Globe.CorporateStructureTypeCeQiir();
                     ce.Qiir.Exception ??= new Globe.CorporateStructureTypeCeQiirException();
-                    ce.Qiir.Exception.Tin = new Globe.TinType { Value = val };
+                    ce.Qiir.Exception.Tin = ParseTin(val);
                     break;
                 case "Ce.Qiir.MopeIpe.Tin.Value":
+                    // Globe 모델에 MopeIpe 미구현 — 추후 XSD 확인 필요
                     break;
                 case "Ce.Qutpr.Art93":
                     ce.Qutpr ??= new Globe.CorporateStructureTypeCeQutpr();
@@ -251,6 +240,23 @@ namespace GlobeMapper.Services
                 ce.Ownership.Add(ownership);
                 dataRow++;
             }
+        }
+
+        /// <summary>
+        /// B열에서 BLOCK_HEADER 문자열을 포함하는 행을 모두 찾아 반환.
+        /// 각 행이 CE 블록의 시작점(헤더 행).
+        /// </summary>
+        private static List<int> FindBlockStartRows(IXLWorksheet ws)
+        {
+            var result = new List<int>();
+            var lastRow = ws.LastRowUsed()?.RowNumber() ?? 200;
+            for (int r = 1; r <= lastRow; r++)
+            {
+                var val = ws.Cell(r, 2).GetString()?.Trim();
+                if (!string.IsNullOrEmpty(val) && val.Contains(BLOCK_HEADER))
+                    result.Add(r);
+            }
+            return result;
         }
 
         private static int FindAttachStart(IXLWorksheet ws, int attachNum)

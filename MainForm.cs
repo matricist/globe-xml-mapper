@@ -1,9 +1,7 @@
 using System;
-using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
-using System.Linq;
 using System.Windows.Forms;
-using ClosedXML.Excel;
 using GlobeMapper.Services;
 
 namespace GlobeMapper
@@ -14,25 +12,19 @@ namespace GlobeMapper
         private ControlPanelForm _controlPanel;
 
         private static readonly string TemplatePath = Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory,
-            "Resources",
-            "template.xlsx"
-        );
+            AppDomain.CurrentDomain.BaseDirectory, "Resources", "main_template.xlsx");
 
-        // ── 시트 라우팅 정의 ─────────────────────────────────────────────
-        // Group.xlsx에 포함할 시트 (국가별 계산)
-        private static readonly HashSet<string> GroupSheets = new()
-        {
-            "3.1~3.2.3.2",
-            "3.2.4.4(b)",
-            "3.3.1~3.4.2",
-        };
-
-        // CE_N.xlsx에 포함할 시트 (구성기업별 계산)
-        private static readonly HashSet<string> CeSheets = new() { "3.2.4~3.2.4.5" };
-
-        // main.xlsx에 포함할 시트: GroupSheets·CeSheets를 제외한 나머지
-        // (1.x, 2, 빈 시트, 향후 3.4.3 추가 시 GroupSheets/CeSheets에 없으면 자동 포함)
+        // ── 색상 상수 ──────────────────────────────────────────────────────
+        private static readonly Color BG        = Color.FromArgb(30, 30, 32);
+        private static readonly Color BG2       = Color.FromArgb(36, 36, 40);
+        private static readonly Color BG3       = Color.FromArgb(44, 44, 50);
+        private static readonly Color BORDER    = Color.FromArgb(55, 55, 62);
+        private static readonly Color FG        = Color.FromArgb(215, 215, 220);
+        private static readonly Color FG_DIM    = Color.FromArgb(120, 120, 130);
+        private static readonly Color FG_ACCENT = Color.FromArgb(86, 186, 240);
+        private static readonly Color ACCENT    = Color.FromArgb(210, 160, 0);
+        private static readonly Color PRIMARY   = Color.FromArgb(200, 90, 15);
+        private static readonly Color GREEN     = Color.FromArgb(40, 160, 80);
 
         public MainForm()
         {
@@ -41,575 +33,366 @@ namespace GlobeMapper
 
         private void InitializeComponent()
         {
-            Text = "GIR 2 XML Mapper";
-            AutoScaleMode = AutoScaleMode.Dpi;
+            Text            = "GIR 2 XML Mapper";
+            AutoScaleMode   = AutoScaleMode.Dpi;
             FormBorderStyle = FormBorderStyle.FixedSingle;
-            MaximizeBox = false;
-            StartPosition = FormStartPosition.CenterScreen;
-            var iconPath = Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
-                "Resources",
-                "app.ico"
-            );
-            if (File.Exists(iconPath))
-                Icon = new System.Drawing.Icon(iconPath);
-            ClientSize = new System.Drawing.Size(630, 630);
-            BackColor = System.Drawing.Color.FromArgb(30, 30, 32);
-            ForeColor = System.Drawing.Color.FromArgb(220, 220, 224);
-            Font = new System.Drawing.Font("Segoe UI", 15f);
+            MaximizeBox     = false;
+            StartPosition   = FormStartPosition.CenterScreen;
+            ClientSize      = new Size(480, 380);
+            BackColor       = BG;
+            ForeColor       = FG;
+            Font            = new Font("Segoe UI", 11f);
 
-            // 타이틀 레이블
-            var lblTitle = new Label
-            {
-                Text = "GIR 2 XML Mapper",
-                Dock = DockStyle.Top,
-                Height = 78,
-                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
-                Font = new System.Drawing.Font("Segoe UI Semibold", 19f),
-                ForeColor = System.Drawing.Color.FromArgb(230, 230, 235),
-                BackColor = System.Drawing.Color.FromArgb(22, 22, 24),
-            };
+            var iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "app.ico");
+            if (File.Exists(iconPath)) Icon = new Icon(iconPath);
 
-            // 구분선
-            var divider = new Panel
+            // ── 타이틀 ────────────────────────────────────────────────────
+            var title = new Label
             {
-                Dock = DockStyle.Top,
-                Height = 1,
-                BackColor = System.Drawing.Color.FromArgb(55, 55, 60),
+                Text      = "GIR 2 XML Mapper",
+                Dock      = DockStyle.Top, Height = 64,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font      = new Font("Segoe UI Semibold", 17f),
+                ForeColor = Color.FromArgb(230, 230, 235),
+                BackColor = Color.FromArgb(22, 22, 24),
             };
+            var titleDiv = Divider(DockStyle.Top);
 
-            // ── 그룹: 템플릿 생성 ─────────────────────────────────────────
-            // 헤더 레이블
-            var groupHeader = new Label
+            // ── 버전 ──────────────────────────────────────────────────────
+            var ver = new Label
             {
-                Text = "템플릿 생성",
-                Dock = DockStyle.Top,
-                Height = 48,
-                TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
-                Font = new System.Drawing.Font("Segoe UI", 13f),
-                ForeColor = System.Drawing.Color.FromArgb(130, 130, 140),
-                BackColor = System.Drawing.Color.FromArgb(32, 32, 36),
-                Padding = new Padding(18, 0, 0, 0),
-            };
-            // 헤더 하단 구분선
-            var groupHeaderDiv = new Panel
-            {
-                Dock = DockStyle.Top,
-                Height = 1,
-                BackColor = System.Drawing.Color.FromArgb(55, 55, 62),
-            };
-            // 버튼 영역
-            var groupInner = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                Padding = new Padding(18, 15, 18, 18),
-                RowCount = 3,
-                ColumnCount = 1,
-                BackColor = System.Drawing.Color.Transparent,
-            };
-            groupInner.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            for (int i = 0; i < 3; i++)
-                groupInner.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33f));
-            groupInner.Controls.Add(
-                MakeButton("MNE 생성", BtnCreateTemplate_Click, new Padding(0, 0, 0, 9)),
-                0,
-                0
-            );
-            groupInner.Controls.Add(
-                MakeButton("합산단위 생성", BtnCreateCountry_Click, new Padding(0, 0, 0, 9)),
-                0,
-                1
-            );
-            groupInner.Controls.Add(
-                MakeButton("구성기업 생성", BtnCreateCe_Click, new Padding(0, 0, 0, 0)),
-                0,
-                2
-            );
-
-            // 그룹 컨테이너 (테두리 = 배경색)
-            var groupBox = new Panel
-            {
-                Margin = new Padding(0, 0, 0, 24),
-                Dock = DockStyle.Fill,
-                BackColor = System.Drawing.Color.FromArgb(55, 55, 62), // 테두리 색
-                Padding = new Padding(1),
-            };
-            var groupInside = new Panel
-            {
-                Dock = DockStyle.Fill,
-                BackColor = System.Drawing.Color.FromArgb(36, 36, 40),
-            };
-            // DockStyle.Top은 역순: groupInner(Fill) → div → header
-            groupInside.Controls.Add(groupInner);
-            groupInside.Controls.Add(groupHeaderDiv);
-            groupInside.Controls.Add(groupHeader);
-            groupBox.Controls.Add(groupInside);
-
-            // ── 전체 레이아웃 ─────────────────────────────────────────────
-            var layout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                Padding = new Padding(42, 30, 42, 42),
-                RowCount = 3,
-                ColumnCount = 1,
-                BackColor = System.Drawing.Color.Transparent,
-            };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // 서식 편집
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // XML 변환하기
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // 템플릿 생성 그룹
-
-            layout.Controls.Add(
-                MakeButton("서식 편집", BtnOpen_Click, new Padding(0, 0, 0, 12), primary: true),
-                0,
-                0
-            );
-            layout.Controls.Add(
-                MakeButton(
-                    "XML 변환하기",
-                    BtnConvert_Click,
-                    new Padding(0, 0, 0, 24),
-                    accent: true
-                ),
-                0,
-                1
-            );
-            layout.Controls.Add(groupBox, 0, 2);
-
-            // 버전 정보 (하단 고정)
-            var lblVersion = new Label
-            {
-                Text = "v1   만료일 2026.6.30   라이선스 DA",
-                Dock = DockStyle.Bottom,
-                Height = 36,
-                TextAlign = System.Drawing.ContentAlignment.MiddleCenter,
-                Font = new System.Drawing.Font("Segoe UI", 12f),
-                ForeColor = System.Drawing.Color.FromArgb(80, 80, 90),
-                BackColor = System.Drawing.Color.FromArgb(22, 22, 24),
+                Text      = "v1   만료일 2026.6.30   라이선스 DA",
+                Dock      = DockStyle.Bottom, Height = 28,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font      = new Font("Segoe UI", 9f),
+                ForeColor = Color.FromArgb(70, 70, 80),
+                BackColor = Color.FromArgb(22, 22, 24),
             };
 
-            // DockStyle.Top은 나중에 추가된 것이 위로 가므로 역순
-            Controls.Add(lblVersion);
-            Controls.Add(layout);
-            Controls.Add(divider);
-            Controls.Add(lblTitle);
+            // ── 하단 버튼 영역 ─────────────────────────────────────────────
+            var bottomDiv = Divider(DockStyle.Bottom);
+            var bottom = new Panel
+            {
+                Dock      = DockStyle.Bottom, Height = 136,
+                BackColor = Color.FromArgb(24, 24, 26),
+                Padding   = new Padding(28, 14, 28, 14),
+            };
+
+            var btnXml = MakeBtn("XML 변환하기", BtnConvert_Click, accent: true);
+            btnXml.Dock   = DockStyle.Bottom;
+            btnXml.Height = 48;
+            btnXml.Margin = new Padding(0, 8, 0, 0);
+
+            var btnPanel = MakeBtn("서식 작업 시작", BtnSwitchToPanel_Click, primary: true);
+            btnPanel.Dock   = DockStyle.Top;
+            btnPanel.Height = 48;
+
+            bottom.Controls.Add(btnXml);
+            bottom.Controls.Add(btnPanel);
+
+            // ── 중앙 콘텐츠 영역 ──────────────────────────────────────────
+            var content = new Panel
+            {
+                Dock       = DockStyle.Fill,
+                BackColor  = Color.Transparent,
+                Padding    = new Padding(28, 20, 28, 8),
+            };
+
+            // 섹션 라벨
+            var lblSection = new Label
+            {
+                Text      = "새 서식 파일 만들기",
+                Height    = 28,
+                ForeColor = FG_ACCENT,
+                Font      = new Font("Segoe UI", 10f, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleLeft,
+            };
+
+            // 3개 버튼 그리드
+            var grid = new TableLayoutPanel
+            {
+                ColumnCount = 3, RowCount = 1,
+                Height      = 60,
+                BackColor   = Color.Transparent,
+                Margin      = Padding.Empty, Padding = Padding.Empty,
+            };
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.3f));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.3f));
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.4f));
+            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+            var btnMne   = MakeBtn("MNE 생성",    BtnCreateMne_Click,  primary: true);
+            var btnGroup = MakeBtn("합산단위 생성", BtnCreateGroup_Click, primary: true);
+            var btnCe    = MakeBtn("구성기업 생성", BtnCreateCe_Click,   primary: true);
+            btnMne.Dock   = DockStyle.Fill; btnMne.Font   = new Font("Segoe UI", 10.5f); btnMne.Margin   = new Padding(0, 0, 6, 0);
+            btnGroup.Dock = DockStyle.Fill; btnGroup.Font = new Font("Segoe UI", 10.5f); btnGroup.Margin = new Padding(3, 0, 3, 0);
+            btnCe.Dock    = DockStyle.Fill; btnCe.Font    = new Font("Segoe UI", 10.5f); btnCe.Margin    = new Padding(6, 0, 0, 0);
+
+            grid.Controls.Add(btnMne,   0, 0);
+            grid.Controls.Add(btnGroup, 1, 0);
+            grid.Controls.Add(btnCe,    2, 0);
+
+            // 절대 배치
+            content.Controls.Add(lblSection);
+            content.Controls.Add(grid);
+
+            content.Resize += (s, e) =>
+            {
+                var w = content.ClientSize.Width - content.Padding.Left - content.Padding.Right;
+                lblSection.SetBounds(0, 0, w, 28);
+                grid.SetBounds(0, 36, w, 60);
+            };
+
+            Controls.Add(content);
+            Controls.Add(bottom);
+            Controls.Add(bottomDiv);
+            Controls.Add(titleDiv);
+            Controls.Add(title);
+            Controls.Add(ver);
         }
 
-        private static Button MakeButton(
-            string text,
-            EventHandler click,
-            Padding margin,
-            bool primary = false,
-            bool accent = false
-        )
+        // ─────────────────────────────────────────────────────────────────────
+        //  버튼 핸들러
+        // ─────────────────────────────────────────────────────────────────────
+
+        private void BtnSwitchToPanel_Click(object sender, EventArgs e)
         {
-            var bg =
-                accent ? System.Drawing.Color.FromArgb(210, 160, 0)
-                : primary ? System.Drawing.Color.FromArgb(200, 90, 15)
-                : System.Drawing.Color.FromArgb(44, 44, 48);
-            var hover =
-                accent ? System.Drawing.Color.FromArgb(225, 175, 10)
-                : primary ? System.Drawing.Color.FromArgb(218, 105, 25)
-                : System.Drawing.Color.FromArgb(54, 54, 60);
-            var fg =
-                (accent || primary)
-                    ? System.Drawing.Color.White
-                    : System.Drawing.Color.FromArgb(210, 210, 215);
-
-            var btn = new Button
-            {
-                Text = text,
-                Dock = DockStyle.Fill,
-                Height = 63,
-                Margin = margin,
-                FlatStyle = FlatStyle.Flat,
-                BackColor = bg,
-                ForeColor = fg,
-                Font = new System.Drawing.Font("Segoe UI", 15f),
-                Cursor = Cursors.Hand,
-            };
-            btn.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(65, 65, 72);
-            btn.FlatAppearance.BorderSize = 1;
-            btn.FlatAppearance.MouseOverBackColor = hover;
-            btn.Click += click;
-            return btn;
-        }
-
-        // ── 파일 열기 ────────────────────────────────────────────────────────
-        private void BtnOpen_Click(object sender, EventArgs e)
-        {
-            using var dlg = new OpenFileDialog
-            {
-                Filter = "Excel 파일 (*.xlsx)|*.xlsx",
-                Title = "서식 파일 열기",
-            };
-            if (dlg.ShowDialog() != DialogResult.OK)
-                return;
-            OpenExcelAndShowPanel(dlg.FileName);
-        }
-
-        // ── 템플릿 생성 ──────────────────────────────────────────────────────
-        // 폴더 선택 → 해당 폴더에 main.xlsx 생성 (3.1~3.2.3.2 시트 제외)
-        private void BtnCreateTemplate_Click(object sender, EventArgs e)
-        {
-            if (!CheckTemplate())
-                return;
-
-            using var dlg = new FolderBrowserDialog
-            {
-                Description = "프로젝트 폴더를 선택하세요. 이 폴더에 main.xlsx가 생성됩니다.",
-                UseDescriptionForTitle = true,
-            };
-            if (dlg.ShowDialog() != DialogResult.OK)
-                return;
-
-            var savePath = Path.Combine(dlg.SelectedPath, "main.xlsx");
-            if (
-                File.Exists(savePath)
-                && MessageBox.Show(
-                    $"이미 main.xlsx가 존재합니다.\n덮어쓰시겠습니까?",
-                    "확인",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question
-                ) != DialogResult.Yes
-            )
-                return;
-
             try
             {
-                CreateMainFile(TemplatePath, savePath);
-                OfferOpenFolder(dlg.SelectedPath, "main.xlsx 생성 완료.");
-
                 _excel = new ExcelController();
-                _excel.Open(savePath);
+                _excel.AttachToActive();
                 ShowControlPanel();
             }
-            catch (Exception ex)
+            catch
             {
-                MessageBox.Show(
-                    $"템플릿 생성 오류:\n{ex.Message}",
-                    "오류",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error
-                );
+                // 활성 Excel 없으면 파일 열기로 폴백
+                using var dlg = new OpenFileDialog
+                {
+                    Filter = "Excel 파일 (*.xlsx;*.xlsm)|*.xlsx;*.xlsm",
+                    Title  = "서식 파일 열기",
+                };
+                if (dlg.ShowDialog() != DialogResult.OK) return;
+                try
+                {
+                    _excel = new ExcelController();
+                    _excel.Open(dlg.FileName);
+                    ShowControlPanel();
+                }
+                catch (Exception ex2) { ShowError($"파일 열기 오류:\n{ex2.Message}"); }
             }
         }
 
-        // ── 국가별 시트 생성 ──────────────────────────────────────────────────
-        // 프로젝트 폴더 선택 → 개수 입력 → 1/, 2/, ... 폴더에 3.1~3.2.3.2.xlsx 생성
-        private void BtnCreateCountry_Click(object sender, EventArgs e)
+        private void BtnCreateMne_Click(object sender, EventArgs e)
         {
-            if (!CheckTemplate())
-                return;
+            if (!File.Exists(TemplatePath))
+            { ShowError($"템플릿 파일을 찾을 수 없습니다.\n{TemplatePath}"); return; }
 
-            using var dlg = new FolderBrowserDialog
+            using var dlg = new SaveFileDialog
             {
-                Description = "프로젝트 폴더를 선택하세요 (main.xlsx가 있는 폴더).",
+                Filter   = "Excel 파일 (*.xlsx)|*.xlsx",
+                Title    = "MNE 파일 저장",
+                FileName = $"MNE_{DateTime.Now:yyyyMMdd}.xlsx",
+            };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+
+            try
+            {
+                File.Copy(TemplatePath, dlg.FileName, overwrite: true);
+                MessageBox.Show($"MNE 파일이 생성되었습니다.\n{dlg.FileName}",
+                    "완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                if (MessageBox.Show("생성된 파일을 Excel로 여시겠습니까?", "열기",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                {
+                    _excel = new ExcelController();
+                    _excel.Open(dlg.FileName);
+                    ShowControlPanel();
+                }
+            }
+            catch (Exception ex) { ShowError($"파일 생성 오류:\n{ex.Message}"); }
+        }
+
+        private void BtnCreateGroup_Click(object sender, EventArgs e)
+        {
+            if (!File.Exists(TemplatePath))
+            { ShowError($"템플릿 파일을 찾을 수 없습니다.\n{TemplatePath}"); return; }
+
+            // 저장 폴더 선택
+            using var folderDlg = new FolderBrowserDialog
+            {
+                Description         = "합산단위 파일을 저장할 폴더를 선택하세요.",
                 UseDescriptionForTitle = true,
             };
-            if (dlg.ShowDialog() != DialogResult.OK)
-                return;
+            if (folderDlg.ShowDialog() != DialogResult.OK) return;
 
-            if (!TryAskCount("생성할 국가 수:", out int count))
-                return;
-
-            // 이미 존재하는 번호 폴더 확인
-            var existing = Enumerable
-                .Range(1, count)
-                .Where(i => Directory.Exists(Path.Combine(dlg.SelectedPath, i.ToString())))
-                .ToList();
-            if (
-                existing.Count > 0
-                && MessageBox.Show(
-                    $"폴더 {string.Join(", ", existing)}이(가) 이미 존재합니다.\n덮어쓰시겠습니까?",
-                    "확인",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question
-                ) != DialogResult.Yes
-            )
-                return;
+            // 개수 입력
+            int count = AskCount("합산단위를 몇 개 생성할까요?");
+            if (count <= 0) return;
 
             try
             {
                 for (int i = 1; i <= count; i++)
                 {
-                    var folder = Path.Combine(dlg.SelectedPath, i.ToString());
-                    Directory.CreateDirectory(folder);
-                    var dest = Path.Combine(folder, "Group.xlsx");
-                    CreateCountryFile(TemplatePath, dest);
+                    var subDir = Path.Combine(folderDlg.SelectedPath, $"합산단위_{i}");
+                    Directory.CreateDirectory(subDir);
+                    var dest = Path.Combine(subDir, $"합산단위_{i}.xlsx");
+                    File.Copy(TemplatePath, dest, overwrite: true);
                 }
-
-                OfferOpenFolder(dlg.SelectedPath, $"국가별 폴더 {count}개 생성 완료.");
+                MessageBox.Show($"합산단위 {count}개가 생성되었습니다.\n{folderDlg.SelectedPath}",
+                    "완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show(
-                    $"국가별 시트 생성 오류:\n{ex.Message}",
-                    "오류",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error
-                );
-            }
+            catch (Exception ex) { ShowError($"파일 생성 오류:\n{ex.Message}"); }
         }
 
-        // ── 구성기업 생성 ─────────────────────────────────────────────────────
-        // 국가 폴더 선택 → 개수 입력 → 해당 폴더에 CE 파일 생성
         private void BtnCreateCe_Click(object sender, EventArgs e)
         {
-            using var dlg = new FolderBrowserDialog
+            if (!File.Exists(TemplatePath))
+            { ShowError($"템플릿 파일을 찾을 수 없습니다.\n{TemplatePath}"); return; }
+
+            // 저장 폴더 선택
+            using var folderDlg = new FolderBrowserDialog
             {
-                Description = "국가 폴더를 선택하세요 (숫자 폴더, 예: 1, 2, 3...).",
+                Description         = "구성기업 파일을 저장할 폴더를 선택하세요.",
                 UseDescriptionForTitle = true,
             };
-            if (dlg.ShowDialog() != DialogResult.OK)
-                return;
+            if (folderDlg.ShowDialog() != DialogResult.OK) return;
 
-            if (!TryAskCount("생성할 구성기업 수:", out int count))
-                return;
+            // 개수 입력
+            int count = AskCount("구성기업을 몇 개 생성할까요?");
+            if (count <= 0) return;
 
             try
             {
                 for (int i = 1; i <= count; i++)
                 {
-                    var dest = Path.Combine(dlg.SelectedPath, $"CE_{i}.xlsx");
-                    CreateCeFile(TemplatePath, dest);
+                    var dest = Path.Combine(folderDlg.SelectedPath, $"구성기업_{i}.xlsx");
+                    File.Copy(TemplatePath, dest, overwrite: true);
                 }
-
-                OfferOpenFolder(dlg.SelectedPath, $"구성기업 파일 {count}개 생성 완료.");
+                MessageBox.Show($"구성기업 {count}개가 생성되었습니다.\n{folderDlg.SelectedPath}",
+                    "완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show(
-                    $"구성기업 생성 오류:\n{ex.Message}",
-                    "오류",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error
-                );
-            }
+            catch (Exception ex) { ShowError($"파일 생성 오류:\n{ex.Message}"); }
         }
 
-        // ── XML 변환하기 ──────────────────────────────────────────────────────
+        // 개수 입력 미니 다이얼로그 (0 이하 반환 = 취소)
+        private static int AskCount(string prompt)
+        {
+            var dlg = new Form
+            {
+                Text            = "개수 입력",
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                StartPosition   = FormStartPosition.CenterParent,
+                ClientSize      = new Size(300, 110),
+                MaximizeBox     = false, MinimizeBox = false,
+                BackColor       = Color.FromArgb(36, 36, 40),
+                ForeColor       = Color.FromArgb(215, 215, 220),
+            };
+
+            var lbl = new Label
+            {
+                Text     = prompt,
+                AutoSize = false,
+                ForeColor = Color.FromArgb(215, 215, 220),
+                Font     = new Font("Segoe UI", 10f),
+            };
+            lbl.SetBounds(16, 14, 268, 22);
+
+            var txt = new TextBox
+            {
+                Font      = new Font("Segoe UI", 11f),
+                BackColor = Color.FromArgb(44, 44, 50),
+                ForeColor = Color.FromArgb(215, 215, 220),
+                BorderStyle = BorderStyle.FixedSingle,
+                Text      = "1",
+            };
+            txt.SetBounds(16, 42, 268, 28);
+
+            var btnOk = new Button
+            {
+                Text      = "확인",
+                DialogResult = DialogResult.OK,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(200, 90, 15),
+                ForeColor = Color.White,
+                Font      = new Font("Segoe UI", 10f),
+            };
+            btnOk.FlatAppearance.BorderSize = 0;
+            btnOk.SetBounds(148, 76, 136, 26);
+
+            dlg.Controls.AddRange(new Control[] { lbl, txt, btnOk });
+            dlg.AcceptButton = btnOk;
+
+            if (dlg.ShowDialog() != DialogResult.OK) return 0;
+            return int.TryParse(txt.Text.Trim(), out int n) && n > 0 ? n : 0;
+        }
+
         private void BtnConvert_Click(object sender, EventArgs e)
         {
             using var terms = new TermsDialog();
-            if (terms.ShowDialog(this) != DialogResult.OK)
-                return;
+            if (terms.ShowDialog(this) != DialogResult.OK) return;
 
-            using var dlg = new FolderBrowserDialog
+            // 폴더 선택
+            using var folderDlg = new FolderBrowserDialog
             {
-                Description = "프로젝트 폴더를 선택하세요 (main.xlsx가 있는 폴더).",
+                Description            = "변환할 서식 파일이 있는 폴더를 선택하세요.",
                 UseDescriptionForTitle = true,
             };
-            if (dlg.ShowDialog() != DialogResult.OK)
-                return;
+            if (folderDlg.ShowDialog() != DialogResult.OK) return;
+            var rootPath = folderDlg.SelectedPath;
 
             using var saveDlg = new SaveFileDialog
             {
-                Filter = "XML 파일 (*.xml)|*.xml",
-                Title = "XML 파일 저장",
-                FileName = "GLOBE_OECD.xml",
-                InitialDirectory = dlg.SelectedPath,
+                Filter           = "XML 파일 (*.xml)|*.xml",
+                Title            = "XML 파일 저장",
+                FileName         = "GLOBE_OECD.xml",
+                InitialDirectory = rootPath,
             };
-            if (saveDlg.ShowDialog() != DialogResult.OK)
-                return;
+            if (saveDlg.ShowDialog() != DialogResult.OK) return;
 
             try
             {
                 var globe = new Globe.GlobeOecd
                 {
-                    Version = "2.0",
+                    Version     = "2.0",
                     MessageSpec = new Globe.MessageSpecType(),
-                    GlobeBody = new Globe.GlobeBodyType(),
+                    GlobeBody   = new Globe.GlobeBodyType(),
                 };
 
-                var orchestrator = new MappingOrchestrator();
-                var mappingErrors = orchestrator.MapFolder(dlg.SelectedPath, globe);
+                var orchestrator  = new MappingOrchestrator();
+                var mappingErrors = orchestrator.MapFolder(rootPath, globe);
 
                 var xml = XmlExportService.Serialize(globe);
                 File.WriteAllText(saveDlg.FileName, xml, System.Text.Encoding.UTF8);
 
                 var validationErrors = ValidationUtil.Validate(globe);
-
                 var errorsPath = Path.ChangeExtension(saveDlg.FileName, ".errors.txt");
+
                 if (mappingErrors.Count > 0 || validationErrors.Count > 0)
                 {
-                    File.WriteAllText(
-                        errorsPath,
+                    File.WriteAllText(errorsPath,
                         $"[오류 목록] {DateTime.Now:yyyy-MM-dd HH:mm:ss}{Environment.NewLine}"
-                            + $"매핑 오류 {mappingErrors.Count}건 / 검증 오류 {validationErrors.Count}건{Environment.NewLine}{Environment.NewLine}"
-                            + string.Join(Environment.NewLine, mappingErrors)
-                            + Environment.NewLine
-                            + string.Join(Environment.NewLine, validationErrors),
-                        System.Text.Encoding.UTF8
-                    );
+                        + $"매핑 오류 {mappingErrors.Count}건 / 검증 오류 {validationErrors.Count}건{Environment.NewLine}{Environment.NewLine}"
+                        + string.Join(Environment.NewLine, mappingErrors)
+                        + Environment.NewLine
+                        + string.Join(Environment.NewLine, validationErrors),
+                        System.Text.Encoding.UTF8);
                     MessageBox.Show(
                         $"XML 생성 완료.\n매핑 오류: {mappingErrors.Count}건\n검증 오류: {validationErrors.Count}건\n\n오류 목록: {errorsPath}",
-                        "완료 (오류 있음)",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning
-                    );
+                        "완료 (오류 있음)", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
                 else
                 {
-                    if (File.Exists(errorsPath))
-                        File.Delete(errorsPath);
-                    MessageBox.Show(
-                        "XML 생성이 완료되었습니다.",
-                        "완료",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information
-                    );
+                    if (File.Exists(errorsPath)) File.Delete(errorsPath);
+                    MessageBox.Show("XML 생성이 완료되었습니다.", "완료",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show(
-                    $"XML 변환 오류:\n{ex.Message}",
-                    "오류",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error
-                );
-            }
+            catch (Exception ex) { ShowError($"XML 변환 오류:\n{ex.Message}"); }
         }
 
-        // ── 파일 생성 헬퍼 ───────────────────────────────────────────────────
-
-        /// <summary>
-        /// template → main.xlsx: GroupSheets + CeSheets 제거, 나머지(1.x, 2, 빈 시트, 3.4.3 등) 유지.
-        /// </summary>
-        private static void CreateMainFile(string templatePath, string savePath)
-        {
-            File.Copy(templatePath, savePath, overwrite: true);
-            using var wb = new XLWorkbook(savePath);
-            var toDelete = wb
-                .Worksheets.Where(ws => GroupSheets.Contains(ws.Name) || CeSheets.Contains(ws.Name))
-                .ToList();
-            foreach (var ws in toDelete)
-                ws.Delete();
-            wb.Save();
-        }
-
-        /// <summary>
-        /// template → Group.xlsx: GroupSheets에 정의된 시트만 유지.
-        /// 향후 3.3.1~3.4.2 시트를 GroupSheets에 추가하면 자동 포함.
-        /// </summary>
-        private static void CreateCountryFile(string templatePath, string savePath)
-        {
-            File.Copy(templatePath, savePath, overwrite: true);
-            using var wb = new XLWorkbook(savePath);
-            var toDelete = wb.Worksheets.Where(ws => !GroupSheets.Contains(ws.Name)).ToList();
-            foreach (var ws in toDelete)
-                ws.Delete();
-            wb.Save();
-        }
-
-        /// <summary>
-        /// template → CE_N.xlsx: CeSheets에 정의된 시트만 유지.
-        /// 향후 CE 섹션 시트를 CeSheets에 추가하면 자동 포함.
-        /// </summary>
-        private static void CreateCeFile(string templatePath, string savePath)
-        {
-            if (File.Exists(savePath))
-                return; // 이미 있으면 건너뜀
-            File.Copy(templatePath, savePath, overwrite: false);
-            using var wb = new XLWorkbook(savePath);
-            var toDelete = wb.Worksheets.Where(ws => !CeSheets.Contains(ws.Name)).ToList();
-            foreach (var ws in toDelete)
-                ws.Delete();
-            wb.Save();
-        }
-
-        // ── 공통 헬퍼 ────────────────────────────────────────────────────────
-
-        private static void OfferOpenFolder(string folderPath, string message)
-        {
-            var result = MessageBox.Show(
-                $"{message}\n\n해당 폴더를 여시겠습니까?",
-                "완료",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Information
-            );
-            if (result == DialogResult.Yes)
-                System.Diagnostics.Process.Start("explorer.exe", folderPath);
-        }
-
-        private bool CheckTemplate()
-        {
-            if (File.Exists(TemplatePath))
-                return true;
-            MessageBox.Show(
-                "템플릿 파일을 찾을 수 없습니다.\n" + TemplatePath,
-                "오류",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error
-            );
-            return false;
-        }
-
-        private static bool TryAskCount(string prompt, out int count)
-        {
-            count = 0;
-            using var f = new Form
-            {
-                Text = "개수 입력",
-                Size = new System.Drawing.Size(540, 270),
-                FormBorderStyle = FormBorderStyle.FixedDialog,
-                StartPosition = FormStartPosition.CenterParent,
-                MaximizeBox = false,
-                MinimizeBox = false,
-                Font = new System.Drawing.Font("Segoe UI", 15f),
-            };
-            var lbl = new Label
-            {
-                Text = prompt,
-                AutoSize = true,
-                Location = new System.Drawing.Point(36, 36),
-            };
-            var nud = new NumericUpDown
-            {
-                Location = new System.Drawing.Point(36, 87),
-                Width = 165,
-                Height = 48,
-                Minimum = 1,
-                Maximum = 99,
-                Value = 1,
-                Font = new System.Drawing.Font("Segoe UI", 16f),
-            };
-            var btnOk = new Button
-            {
-                Text = "확인",
-                DialogResult = DialogResult.OK,
-                Location = new System.Drawing.Point(330, 84),
-                Width = 150,
-                Height = 54,
-            };
-            f.Controls.AddRange(new Control[] { lbl, nud, btnOk });
-            f.AcceptButton = btnOk;
-
-            if (f.ShowDialog() != DialogResult.OK)
-                return false;
-            count = (int)nud.Value;
-            return true;
-        }
-
-        private void OpenExcelAndShowPanel(string path)
-        {
-            try
-            {
-                _excel = new ExcelController();
-                _excel.Open(path);
-                ShowControlPanel();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(
-                    $"파일 열기 오류:\n{ex.Message}",
-                    "오류",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error
-                );
-            }
-        }
+        // ─────────────────────────────────────────────────────────────────────
+        //  Excel COM 헬퍼
+        // ─────────────────────────────────────────────────────────────────────
 
         private void ShowControlPanel()
         {
@@ -617,8 +400,7 @@ namespace GlobeMapper
             _controlPanel = new ControlPanelForm(_excel);
             _controlPanel.FormClosed += (s, e) =>
             {
-                _excel?.Dispose();
-                _excel = null;
+                _excel?.Dispose(); _excel = null;
                 _controlPanel = null;
                 Show();
             };
@@ -631,5 +413,41 @@ namespace GlobeMapper
             _controlPanel?.Close();
             base.OnFormClosing(e);
         }
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  UI 헬퍼
+        // ─────────────────────────────────────────────────────────────────────
+
+        private static Panel Divider(DockStyle dock) => new Panel
+        {
+            Height    = 1,
+            BackColor = Color.FromArgb(55, 55, 62),
+            Dock      = dock,
+        };
+
+        private static Button MakeBtn(string text, EventHandler click,
+            bool accent = false, bool primary = false)
+        {
+            var bg    = accent ? ACCENT : primary ? PRIMARY : BG3;
+            var hover = accent  ? Color.FromArgb(225, 175, 10)
+                      : primary ? Color.FromArgb(218, 105, 25)
+                      : Color.FromArgb(54, 54, 60);
+            var btn = new Button
+            {
+                Text      = text,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = bg,
+                ForeColor = (accent || primary) ? Color.White : FG,
+                Font      = new Font("Segoe UI", 12f),
+                Cursor    = Cursors.Hand,
+            };
+            btn.FlatAppearance.BorderSize = 0;
+            btn.FlatAppearance.MouseOverBackColor = hover;
+            btn.Click += click;
+            return btn;
+        }
+
+        private static void ShowError(string msg) =>
+            MessageBox.Show(msg, "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
     }
 }

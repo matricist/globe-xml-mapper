@@ -17,6 +17,7 @@ namespace GlobeMapper
         private Button btnToggle;
         private Timer _sheetTracker;
         private string _lastSheetName;
+        private int _trackerFailCount;
         private Point _dragStart;
         private Point _formStart;
         private bool _dragging;
@@ -28,7 +29,7 @@ namespace GlobeMapper
         private const int EX_BLOCK_START  = 3;
         private const int EX_BLOCK_END    = 6;
         private const int EX_BLOCK_GAP    = 2;
-        private const string ATTACH_SHEET_NAME = "1.3.2.1 첨부";
+        private const string ATTACH_SHEET_NAME = "그룹구조 첨부";
 
         private int _selectedAttachNum  = 1;
         private int _selectedSheet3Page = 1;
@@ -172,28 +173,28 @@ namespace GlobeMapper
             _dynamicPanel.Controls.Clear();
             var y = 0;
 
-            if (sheetName == "1.3.1")
+            if (sheetName == "최종모기업")
             {
-                var count = _excel.GetRowBlockCount(sheetName);
+                var count = _excel.GetRowBlockCount(sheetName, blockHeader: "1.3.1");
                 y = AddSectionRow("최종모기업", $"{count}개", y,
-                    () => { _excel.AddRowBlock(sheetName, UPE_BLOCK_START, UPE_BLOCK_END, UPE_BLOCK_GAP); UpdateDynamicPanel(sheetName); },
+                    () => { _excel.AddRowBlock(sheetName, UPE_BLOCK_START, UPE_BLOCK_END, UPE_BLOCK_GAP, dataColStart: 10, dataColEnd: 10, blockHeader: "1.3.1"); UpdateDynamicPanel(sheetName); },
                     () => {
                         if (count <= 1) { Warn("최소 1개는 유지해야 합니다."); return; }
                         if (!Confirm("마지막 최종모기업을 삭제하시겠습니까?")) return;
-                        _excel.RemoveRowBlock(sheetName, UPE_BLOCK_START, UPE_BLOCK_END, UPE_BLOCK_GAP);
+                        _excel.RemoveRowBlock(sheetName, UPE_BLOCK_START, UPE_BLOCK_END, UPE_BLOCK_GAP, blockHeader: "1.3.1");
                         UpdateDynamicPanel(sheetName);
                     });
                 y += 4;
                 y = AddActionButton("시트 초기화", Color.FromArgb(52, 52, 56), y, () =>
                 {
                     if (!Confirm("시트를 초기 상태로 되돌리시겠습니까?", true)) return;
-                    _excel.ResetSheet(sheetName, UPE_BLOCK_START, UPE_BLOCK_END, UPE_BLOCK_GAP);
+                    _excel.ResetSheet(sheetName, UPE_BLOCK_START, UPE_BLOCK_END, UPE_BLOCK_GAP, dataColStart: 10, dataColEnd: 10, blockHeader: "1.3.1");
                     UpdateDynamicPanel(sheetName);
                 });
             }
-            else if (sheetName != null && sheetName.Contains("첨부"))
+            else if (sheetName == "그룹구조 첨부")
             {
-                var ceCount = _excel.GetCeBlockCount("1.3.2.1");
+                var ceCount = _excel.GetCeBlockCount("그룹구조");
                 if (_selectedAttachNum < 1 || _selectedAttachNum > ceCount) _selectedAttachNum = 1;
 
                 y = AddNumberSelector(y, "첨부 번호:", ceCount,
@@ -208,7 +209,17 @@ namespace GlobeMapper
                         _excel.RemoveOwnerRow(sheetName, _selectedAttachNum); UpdateDynamicPanel(sheetName);
                     });
             }
-            else if (sheetName == "1.3.2.1")
+            else if (sheetName == "3.4.1 첨부")
+            {
+                var ownerCount = _excel.GetOwnerRowCount(sheetName, 1);
+                y = AddSectionRow("주주 목록", $"{ownerCount}행", y,
+                    () => { _excel.AddOwnerRow(sheetName, 1); UpdateDynamicPanel(sheetName); },
+                    () => {
+                        if (ownerCount <= 0) { Warn("삭제할 행이 없습니다."); return; }
+                        _excel.RemoveOwnerRow(sheetName, 1); UpdateDynamicPanel(sheetName);
+                    });
+            }
+            else if (sheetName == "그룹구조")
             {
                 var count = _excel.GetCeBlockCount(sheetName);
                 y = AddSectionRow("구성기업", $"{count}개", y,
@@ -226,7 +237,7 @@ namespace GlobeMapper
                     UpdateDynamicPanel(sheetName);
                 });
             }
-            else if (sheetName == "1.3.2.2")
+            else if (sheetName == "제외기업")
             {
                 var count = _excel.GetRowBlockCount(sheetName);
                 y = AddSectionRow("제외기업", $"{count}개", y,
@@ -245,7 +256,7 @@ namespace GlobeMapper
                     UpdateDynamicPanel(sheetName);
                 });
             }
-            else if (sheetName == "2")
+            else if (sheetName == "적용면제")
             {
                 var count = _excel.GetRowBlockCount(sheetName);
                 y = AddSectionRow("국가별 적용면제", $"{count}개", y,
@@ -262,7 +273,7 @@ namespace GlobeMapper
                     _excel.ResetSheet2(sheetName); UpdateDynamicPanel(sheetName);
                 });
             }
-            else if (sheetName == "1.4")
+            else if (sheetName == "요약")
             {
                 var count = _excel.GetRowBlockCount(sheetName);
                 y = AddSectionRow("정보 요약", $"{count}행", y,
@@ -272,14 +283,14 @@ namespace GlobeMapper
                         _excel.RemoveSimpleRowByMeta(sheetName, 4); UpdateDynamicPanel(sheetName);
                     });
             }
-            else if (sheetName == "1.3.3")
+            else if (sheetName == "그룹구조 변동")
             {
                 var count = _excel.GetRowBlockCount(sheetName);
                 y = AddSectionRow("기업구조 변동", $"{count}행", y,
-                    () => { _excel.AddSimpleRowByMeta(sheetName, 7); UpdateDynamicPanel(sheetName); },
+                    () => { _excel.AddSimpleRowByMeta(sheetName, 6); UpdateDynamicPanel(sheetName); },
                     () => {
                         if (count <= 1) { Warn("최소 1행은 유지해야 합니다."); return; }
-                        _excel.RemoveSimpleRowByMeta(sheetName, 7); UpdateDynamicPanel(sheetName);
+                        _excel.RemoveSimpleRowByMeta(sheetName, 6); UpdateDynamicPanel(sheetName);
                     });
             }
             else if (sheetName == "3.1~3.2.3.2")
@@ -303,21 +314,21 @@ namespace GlobeMapper
 
                 var cfcCount = _excel.GetSheet3RowCount(sheetName, $"{pk}:cfc");
                 y = AddSectionRow("통합형피지배", $"{cfcCount}행", y,
-                    () => { _excel.AddSheet3Row(sheetName, $"{pk}:cfc", 101); UpdateDynamicPanel(sheetName); },
+                    () => { _excel.AddSheet3Row(sheetName, $"{pk}:cfc", 97); UpdateDynamicPanel(sheetName); },
                     () => { if (cfcCount <= 1) { Warn("최소 1행은 유지해야 합니다."); return; }
-                            _excel.RemoveSheet3Row(sheetName, $"{pk}:cfc", 101); UpdateDynamicPanel(sheetName); });
+                            _excel.RemoveSheet3Row(sheetName, $"{pk}:cfc", 97); UpdateDynamicPanel(sheetName); });
 
                 var cbCount = _excel.GetSheet3RowCount(sheetName, $"{pk}:carryback");
                 y = AddSectionRow("결손금 소급공제", $"{cbCount}행", y,
-                    () => { _excel.AddSheet3Row(sheetName, $"{pk}:carryback", 145); UpdateDynamicPanel(sheetName); },
+                    () => { _excel.AddSheet3Row(sheetName, $"{pk}:carryback", 140); UpdateDynamicPanel(sheetName); },
                     () => { if (cbCount <= 1) { Warn("최소 1행은 유지해야 합니다."); return; }
-                            _excel.RemoveSheet3Row(sheetName, $"{pk}:carryback", 145); UpdateDynamicPanel(sheetName); });
+                            _excel.RemoveSheet3Row(sheetName, $"{pk}:carryback", 140); UpdateDynamicPanel(sheetName); });
 
                 var artCount = _excel.GetSheet3RowCount(sheetName, $"{pk}:art89");
                 y = AddSectionRow("제89조", $"{artCount}행", y,
-                    () => { _excel.AddSheet3Row(sheetName, $"{pk}:art89", 176); UpdateDynamicPanel(sheetName); },
+                    () => { _excel.AddSheet3Row(sheetName, $"{pk}:art89", 170); UpdateDynamicPanel(sheetName); },
                     () => { if (artCount <= 1) { Warn("최소 1행은 유지해야 합니다."); return; }
-                            _excel.RemoveSheet3Row(sheetName, $"{pk}:art89", 176); UpdateDynamicPanel(sheetName); });
+                            _excel.RemoveSheet3Row(sheetName, $"{pk}:art89", 170); UpdateDynamicPanel(sheetName); });
 
                 y += 8;
                 y = AddActionButton("시트 초기화", Color.FromArgb(52, 52, 56), y, () =>
@@ -325,6 +336,87 @@ namespace GlobeMapper
                     if (!Confirm("시트를 초기 상태로 되돌리시겠습니까?", true)) return;
                     _excel.ResetSheet3(sheetName); UpdateDynamicPanel(sheetName);
                 });
+            }
+            else if (sheetName == "3.2.4~3.2.4.5")
+            {
+                // 각 섹션 행 수 조회
+                var grpCount    = _excel.GetSheet3RowCount(sheetName, "grp");
+                var branchCount = _excel.GetSheet3RowCount(sheetName, "branch");
+                var crossCount  = _excel.GetSheet3RowCount(sheetName, "cross");
+                var upeCount    = _excel.GetSheet3RowCount(sheetName, "upe");
+                var taxCount    = _excel.GetSheet3RowCount(sheetName, "tax");
+                var fairCount   = _excel.GetSheet3RowCount(sheetName, "fair");
+                var distCount   = _excel.GetSheet3RowCount(sheetName, "dist");
+                var otherCount  = _excel.GetSheet3RowCount(sheetName, "other");
+
+                // 앞 섹션 추가행 누적 반영 → 실제 첫 행 계산
+                int r0 = 6;
+                int r1 = 48  + (grpCount - 1);
+                int r2 = 55  + (grpCount - 1) + (branchCount - 1);
+                int r3 = 62  + (grpCount - 1) + (branchCount - 1) + (crossCount - 1);
+                int r4 = 94  + (grpCount - 1) + (branchCount - 1) + (crossCount - 1) + (upeCount - 1);
+                int r5 = 137 + (grpCount - 1) + (branchCount - 1) + (crossCount - 1) + (upeCount - 1) + (taxCount - 1);
+                int r6 = 161 + (grpCount - 1) + (branchCount - 1) + (crossCount - 1) + (upeCount - 1) + (taxCount - 1) + (fairCount - 1);
+                int r7 = 168 + (grpCount - 1) + (branchCount - 1) + (crossCount - 1) + (upeCount - 1) + (taxCount - 1) + (fairCount - 1) + (distCount - 1);
+
+                y = AddSectionRow("(b) 연결납세그룹 통합신고",   $"{grpCount}행",    y,
+                    () => { _excel.AddSheet3Row(sheetName, "grp",    r0); UpdateDynamicPanel(sheetName); },
+                    () => { if (grpCount <= 1)    { Warn("최소 1행은 유지해야 합니다."); return; }
+                            _excel.RemoveSheet3Row(sheetName, "grp",    r0); UpdateDynamicPanel(sheetName); });
+                y = AddSectionRow("(b) 손익 국가간 배분",         $"{branchCount}행", y,
+                    () => { _excel.AddSheet3Row(sheetName, "branch", r1); UpdateDynamicPanel(sheetName); },
+                    () => { if (branchCount <= 1) { Warn("최소 1행은 유지해야 합니다."); return; }
+                            _excel.RemoveSheet3Row(sheetName, "branch", r1); UpdateDynamicPanel(sheetName); });
+                y = AddSectionRow("(c) 국가간 손익 조정",         $"{crossCount}행",  y,
+                    () => { _excel.AddSheet3Row(sheetName, "cross",  r2); UpdateDynamicPanel(sheetName); },
+                    () => { if (crossCount <= 1)  { Warn("최소 1행은 유지해야 합니다."); return; }
+                            _excel.RemoveSheet3Row(sheetName, "cross",  r2); UpdateDynamicPanel(sheetName); });
+                y = AddSectionRow("(d) 최종모기업 소득 감액",     $"{upeCount}행",    y,
+                    () => { _excel.AddSheet3Row(sheetName, "upe",    r3); UpdateDynamicPanel(sheetName); },
+                    () => { if (upeCount <= 1)    { Warn("최소 1행은 유지해야 합니다."); return; }
+                            _excel.RemoveSheet3Row(sheetName, "upe",    r3); UpdateDynamicPanel(sheetName); });
+                y = AddSectionRow("(b) 대상조세 국가간 배분",     $"{taxCount}행",    y,
+                    () => { _excel.AddSheet3Row(sheetName, "tax",    r4); UpdateDynamicPanel(sheetName); },
+                    () => { if (taxCount <= 1)    { Warn("최소 1행은 유지해야 합니다."); return; }
+                            _excel.RemoveSheet3Row(sheetName, "tax",    r4); UpdateDynamicPanel(sheetName); });
+                y = AddSectionRow("k. 공정가액조정 선택",         $"{fairCount}행",   y,
+                    () => { _excel.AddSheet3Row(sheetName, "fair",   r5); UpdateDynamicPanel(sheetName); },
+                    () => { if (fairCount <= 1)   { Warn("최소 1행은 유지해야 합니다."); return; }
+                            _excel.RemoveSheet3Row(sheetName, "fair",   r5); UpdateDynamicPanel(sheetName); });
+                y = AddSectionRow("과세분배방법 적용 선택",       $"{distCount}행",   y,
+                    () => { _excel.AddSheet3Row(sheetName, "dist",   r6); UpdateDynamicPanel(sheetName); },
+                    () => { if (distCount <= 1)   { Warn("최소 1행은 유지해야 합니다."); return; }
+                            _excel.RemoveSheet3Row(sheetName, "dist",   r6); UpdateDynamicPanel(sheetName); });
+                y = AddSectionRow("그 밖의 회계기준",             $"{otherCount}행",  y,
+                    () => { _excel.AddSheet3Row(sheetName, "other",  r7); UpdateDynamicPanel(sheetName); },
+                    () => { if (otherCount <= 1)  { Warn("최소 1행은 유지해야 합니다."); return; }
+                            _excel.RemoveSheet3Row(sheetName, "other",  r7); UpdateDynamicPanel(sheetName); });
+            }
+            else if (sheetName == "UTPR 배분")
+            {
+                var count = _excel.GetRowBlockCount(sheetName, defaultCount: 2);
+                y = AddSectionRow("구성기업 배분내역", $"{count}행", y,
+                    () => { _excel.AddSimpleRowByMeta(sheetName, 4, defaultCount: 2); UpdateDynamicPanel(sheetName); },
+                    () => {
+                        if (count <= 2) { Warn("최소 2행은 유지해야 합니다."); return; }
+                        _excel.RemoveSimpleRowByMeta(sheetName, 4, defaultCount: 2); UpdateDynamicPanel(sheetName);
+                    });
+            }
+            else
+            {
+                // 인식할 수 없는 시트명
+                var lbl = new Label
+                {
+                    Text = $"인식할 수 없는 시트명입니다.\n({sheetName})",
+                    ForeColor = Color.FromArgb(140, 140, 150),
+                    Font = new Font("Segoe UI", 10f),
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Width = _dynamicPanel.Width,
+                    Height = 60,
+                    Top = y,
+                };
+                _dynamicPanel.Controls.Add(lbl);
+                y += 60;
             }
 
             y += 10;
@@ -502,7 +594,13 @@ namespace GlobeMapper
             {
                 try
                 {
-                    if (!_excel.IsOpen) { _sheetTracker.Stop(); Close(); return; }
+                    if (!_excel.IsOpen)
+                    {
+                        _trackerFailCount++;
+                        if (_trackerFailCount >= 3) { _sheetTracker.Stop(); Close(); }
+                        return;
+                    }
+                    _trackerFailCount = 0;
 
                     var current = _excel.GetActiveSheetName();
                     if (current == ExcelController.MetaSheetName)
@@ -517,7 +615,11 @@ namespace GlobeMapper
                         UpdateDynamicPanel(current);
                     }
                 }
-                catch { _sheetTracker.Stop(); Close(); }
+                catch
+                {
+                    _trackerFailCount++;
+                    if (_trackerFailCount >= 3) { _sheetTracker.Stop(); Close(); }
+                }
             };
             _sheetTracker.Start();
 
