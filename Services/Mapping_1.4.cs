@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using ClosedXML.Excel;
 
@@ -15,13 +16,10 @@ namespace GlobeMapper.Services
 
         public override void Map(IXLWorksheet ws, Globe.GlobeOecd globe, List<string> errors, string fileName)
         {
-            var rowCount = 1;
-            if (ws.Workbook.TryGetWorksheet(ExcelController.MetaSheetName, out var metaWs))
-                rowCount = ExcelController.ReadBlockCount(metaWs, ws.Name);
+            var lastRow = ws.LastRowUsed()?.RowNumber() ?? DATA_START_ROW;
 
-            for (int i = 0; i < rowCount; i++)
+            for (int row = DATA_START_ROW; row <= lastRow; row++)
             {
-                var row = DATA_START_ROW + i;
                 var summary = new Globe.GlobeBodyTypeSummary();
                 summary.Jurisdiction = new Globe.SummaryTypeJurisdiction();
 
@@ -36,11 +34,31 @@ namespace GlobeMapper.Services
                     }, errors, fileName, new MappingEntry { Cell = $"B{row}", Label = "소재지국" });
                 }
 
-                // I-J: 적용면제/제외 사유 (SafeHarbour — Collection)
+                // G: 과세권 보유 국가 → Summary.JurWithTaxingRights
+                var taxJurRaw = ws.Cell(row, 7).GetString()?.Trim();
+                if (!string.IsNullOrEmpty(taxJurRaw))
+                {
+                    foreach (var code in taxJurRaw.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        var jwr = new Globe.SummaryTypeJurWithTaxingRights();
+                        SetEnum<Globe.CountryCodeType>(code, v =>
+                        {
+                            jwr.JurisdictionName = v;
+                            jwr.JurisdictionNameSpecified = true;
+                        }, errors, fileName, new MappingEntry { Cell = $"G{row}", Label = "과세권보유국가" });
+                        if (jwr.JurisdictionNameSpecified)
+                            summary.JurWithTaxingRights.Add(jwr);
+                    }
+                }
+
+                // I-J: 적용면제/제외 사유 (SafeHarbour — Collection, 콤마 구분 다중값)
                 var safeHarbour = ws.Cell(row, 9).GetString()?.Trim();
                 if (!string.IsNullOrEmpty(safeHarbour))
-                    SetEnum<Globe.SafeHarbourEnumType>(safeHarbour, v => summary.SafeHarbour.Add(v),
-                        errors, fileName, new MappingEntry { Cell = $"I{row}", Label = "적용면제" });
+                {
+                    foreach (var code in safeHarbour.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                        SetEnum<Globe.SafeHarbourEnumType>(code, v => summary.SafeHarbour.Add(v),
+                            errors, fileName, new MappingEntry { Cell = $"I{row}", Label = "적용면제" });
+                }
 
                 // K-L: 실효세율 범위
                 var etrRange = ws.Cell(row, 11).GetString()?.Trim();

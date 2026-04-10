@@ -22,8 +22,8 @@ namespace GlobeMapper.Services
             (6, "Ce.Id.ReceivingTin"),
             (7, "Ce.Id.GlobeStatus"),
             (12, "Ce.Qiir.PopeIpe"),
-            (13, "Ce.Qiir.Exception.Tin.Value"),
-            (14, "Ce.Qiir.MopeIpe.Tin.Value"),
+            (13, "Ce.Qiir.Exception.Art213.Tin"),  // O16: Art2.1.3 해당 모기업 TIN
+            (14, "Ce.Qiir.Exception.Art215.Tin"),  // O17: Art2.1.5 해당 부분소유모기업 TIN
             (15, "Ce.Qutpr.Art93"),
             (16, "Ce.Qutpr.AggOwnership"),
             (17, "Ce.Qutpr.UpeOwnership"),
@@ -123,7 +123,9 @@ namespace GlobeMapper.Services
                     );
                     break;
                 case "Ce.Id.Name":
-                    ce.Id.Name = val;
+                    var (ceName, ceKName) = ParseNameKName(val);
+                    ce.Id.Name = ceName;
+                    if (ceKName != null) ce.Id.KName = ceKName;
                     break;
                 case "Ce.Id.Tin.Value":
                     ce.Id.Tin.Add(ParseTin(val));
@@ -150,13 +152,23 @@ namespace GlobeMapper.Services
                         entry
                     );
                     break;
-                case "Ce.Qiir.Exception.Tin.Value":
+                case "Ce.Qiir.Exception.Art213.Tin":
+                    // Art2.1.3: 최종모기업/중간모기업에 QIIR 적용 시 해당 모기업 TIN
                     ce.Qiir ??= new Globe.CorporateStructureTypeCeQiir();
                     ce.Qiir.Exception ??= new Globe.CorporateStructureTypeCeQiirException();
+                    ce.Qiir.Exception.ExceptionRule ??= new Globe.CorporateStructureTypeCeQiirExceptionExceptionRule();
+                    ce.Qiir.Exception.ExceptionRule.Art213 = true;
+                    ce.Qiir.Exception.ExceptionRule.Art213Specified = true;
                     ce.Qiir.Exception.Tin = ParseTin(val);
                     break;
-                case "Ce.Qiir.MopeIpe.Tin.Value":
-                    // Globe 모델에 MopeIpe 미구현 — 추후 XSD 확인 필요
+                case "Ce.Qiir.Exception.Art215.Tin":
+                    // Art2.1.5: 부분소유모기업에 QIIR 적용 시 해당 모기업 TIN
+                    ce.Qiir ??= new Globe.CorporateStructureTypeCeQiir();
+                    ce.Qiir.Exception ??= new Globe.CorporateStructureTypeCeQiirException();
+                    ce.Qiir.Exception.ExceptionRule ??= new Globe.CorporateStructureTypeCeQiirExceptionExceptionRule();
+                    ce.Qiir.Exception.ExceptionRule.Art215 = true;
+                    ce.Qiir.Exception.ExceptionRule.Art215Specified = true;
+                    ce.Qiir.Exception.Tin = ParseTin(val);
                     break;
                 case "Ce.Qutpr.Art93":
                     ce.Qutpr ??= new Globe.CorporateStructureTypeCeQutpr();
@@ -164,9 +176,12 @@ namespace GlobeMapper.Services
                     break;
                 case "Ce.Qutpr.AggOwnership":
                     ce.Qutpr ??= new Globe.CorporateStructureTypeCeQutpr();
-                    if (decimal.TryParse(val, out var agg))
+                    if (decimal.TryParse(val.TrimEnd('%').Trim(),
+                        System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out var agg))
                     {
-                        ce.Qutpr.AggOwnership = agg / 100m;
+                        ce.Qutpr.AggOwnership = agg > 1m ? agg / 100m : agg;
                         ce.Qutpr.AggOwnershipSpecified = true;
                     }
                     break;
@@ -231,11 +246,22 @@ namespace GlobeMapper.Services
                         }
                     );
 
-                if (!string.IsNullOrEmpty(tinVal))
-                    ownership.Tin = new Globe.TinType { Value = tinVal };
+                // TIN 없으면 NOTIN 처리 (required 필드)
+                ownership.Tin = !string.IsNullOrEmpty(tinVal) ? ParseTin(tinVal) : NoTin();
 
-                if (!string.IsNullOrEmpty(pctVal) && decimal.TryParse(pctVal, out var pct))
-                    ownership.OwnershipPercentage = pct / 100m;
+                if (!string.IsNullOrEmpty(pctVal))
+                {
+                    // "90%" → "90", "0.9" → "0.9" 정규화 후 파싱
+                    var pctClean = pctVal.TrimEnd('%').Trim();
+                    if (decimal.TryParse(pctClean,
+                        System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out var pct))
+                    {
+                        // >1이면 퍼센트 단위(예: 90 → 0.9), ≤1이면 이미 소수(예: 0.9 → 그대로)
+                        ownership.OwnershipPercentage = pct > 1m ? pct / 100m : pct;
+                    }
+                }
 
                 ce.Ownership.Add(ownership);
                 dataRow++;

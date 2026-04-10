@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using ClosedXML.Excel;
 
@@ -12,6 +13,7 @@ namespace GlobeMapper.Services
 
         protected MappingBase(string mappingFileName)
         {
+            if (mappingFileName == null) return;
             var jsonPath = Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory, "Resources", "mappings", mappingFileName);
             var json = File.ReadAllText(jsonPath);
@@ -19,8 +21,8 @@ namespace GlobeMapper.Services
                 json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         }
 
-        public string SheetName => Mapping.SheetName;
-        public bool Repeatable => Mapping.Repeatable;
+        public string SheetName => Mapping?.SheetName;
+        public bool Repeatable => Mapping?.Repeatable ?? false;
 
         public abstract void Map(IXLWorksheet ws, Globe.GlobeOecd globe, List<string> errors, string fileName);
 
@@ -53,7 +55,11 @@ namespace GlobeMapper.Services
             if (TryParseEnum<T>(value, out var result))
                 setter(result);
             else
-                errors.Add($"[{fileName}] 셀 {entry.Cell}: {typeof(T).Name} 변환 실패 '{value}'");
+            {
+                // 진단: 실제 바이트 값도 포함 (숨은 문자 확인용)
+                var bytes = string.Join(" ", System.Text.Encoding.UTF8.GetBytes(value).Select(b => b.ToString("X2")));
+                errors.Add($"[{fileName}] 셀 {entry.Cell}: {typeof(T).Name} 변환 실패 '{value}' (bytes: {bytes})");
+            }
         }
 
         protected static bool TryParseDate(string value, out DateTime result)
@@ -116,14 +122,32 @@ namespace GlobeMapper.Services
         {
             if (bool.TryParse(value, out var b)) return b;
             var v = value.Trim().ToUpper();
-            return v == "Y" || v == "YES" || v == "1" || v == "TRUE" || v == "O" || v == "예";
+            return v == "Y" || v == "YES" || v == "1" || v == "TRUE" || v == "O" || v == "예" || v == "여";
         }
 
         protected static bool TryParseEnum<T>(string value, out T result) where T : struct, Enum
         {
-            if (Enum.TryParse(value, true, out result))
+            if (TryParseEnumCore<T>(value, out result))
                 return true;
 
+            // "GIR701 구성기업" 같이 코드 뒤에 설명이 붙은 경우 첫 단어만 시도
+            var firstWord = value.Split(' ', 2)[0].Trim();
+            if (firstWord.Length > 0 && firstWord != value && TryParseEnumCore<T>(firstWord, out result))
+                return true;
+
+            // 비가시 유니코드 문자(NBSP, 제로폭 공백 등) 제거 후 재시도
+            var cleaned = new string(value.Where(c => !char.IsControl(c) && c != '\u00A0' && c != '\u200B' && c != '\uFEFF').ToArray()).Trim();
+            if (cleaned.Length > 0 && cleaned != value && TryParseEnumCore<T>(cleaned, out result))
+                return true;
+
+            result = default;
+            return false;
+        }
+
+        private static bool TryParseEnumCore<T>(string value, out T result) where T : struct, Enum
+        {
+            // XmlEnum 매핑 먼저 시도 — OECD GIR 코드("GIR701" 등)는 XmlEnumAttribute로 정의됨
+            // Enum.TryParse의 케이스 인센시티브 동작에 의존하지 않음
             foreach (var field in typeof(T).GetFields(
                 System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
             {
@@ -139,6 +163,10 @@ namespace GlobeMapper.Services
                     }
                 }
             }
+
+            // XmlEnum에 없으면 enum 멤버 이름으로 시도
+            if (Enum.TryParse(value, true, out result))
+                return true;
 
             result = default;
             return false;

@@ -23,7 +23,14 @@ namespace GlobeMapper.Services
         {
             get
             {
-                try { return _workbook != null && _app?.Visible == true; }
+                // _app.Visible 대신 _workbook.Name 접근으로 실제 열림 여부 확인.
+                // Excel이 다이얼로그/작업 중일 때 Visible은 false가 아니지만 COM이 throw할 수 있음.
+                try
+                {
+                    if (_workbook == null || _app == null) return false;
+                    var _ = (string)_workbook.Name;
+                    return true;
+                }
                 catch { return false; }
             }
         }
@@ -135,6 +142,22 @@ namespace GlobeMapper.Services
             finally { QuitApp(); }
         }
 
+        /// <summary>
+        /// COM RPC_E_CALL_REJECTED(0x80010001) 발생 시 최대 maxRetries회 재시도.
+        /// Excel이 일시적으로 바쁜 상태일 때 COM 호출이 거부되는 것을 처리.
+        /// </summary>
+        private static void ComRetry(Action action, int maxRetries = 5, int delayMs = 150)
+        {
+            for (int i = 0; ; i++)
+            {
+                try { action(); return; }
+                catch (COMException ex) when (ex.HResult == unchecked((int)0x80010001) && i < maxRetries)
+                {
+                    System.Threading.Thread.Sleep(delayMs);
+                }
+            }
+        }
+
         #region 시트 내 행 블록 반복 (1.3.1 UPE)
 
         /// <summary>
@@ -165,6 +188,8 @@ namespace GlobeMapper.Services
         public void AddRowBlock(string sheetName, int sourceStartRow, int sourceEndRow, int gap,
             int dataColStart = 15, int dataColEnd = 18, string blockHeader = null)
         {
+            ComRetry(() =>
+            {
             dynamic ws = _workbook.Sheets[sheetName];
             var blockSize = sourceEndRow - sourceStartRow + 1;
 
@@ -217,6 +242,7 @@ namespace GlobeMapper.Services
 
             if (blockHeader == null)
                 SetMetaInt(sheetName, "blockCount", count + 1);
+            }); // ComRetry
         }
 
         /// <summary>
@@ -226,6 +252,9 @@ namespace GlobeMapper.Services
         public bool RemoveRowBlock(string sheetName, int sourceStartRow, int sourceEndRow, int gap,
             string blockHeader = null)
         {
+            bool result = false;
+            ComRetry(() =>
+            {
             dynamic ws = _workbook.Sheets[sheetName];
             var blockSize = sourceEndRow - sourceStartRow + 1;
 
@@ -236,14 +265,14 @@ namespace GlobeMapper.Services
             {
                 var headerRows = FindBlockHeaderRows(ws, blockHeader);
                 count = headerRows.Count;
-                if (count <= 1) return false;
+                if (count <= 1) return;
                 lastBlockStart = headerRows[count - 1];
                 lastBlockEnd = lastBlockStart + (sourceEndRow - sourceStartRow);
             }
             else
             {
                 count = GetMetaInt(sheetName, "blockCount", 1);
-                if (count <= 1) return false;
+                if (count <= 1) return;
                 lastBlockStart = sourceEndRow + 1 + (count - 2) * (blockSize + gap) + gap;
                 lastBlockEnd = lastBlockStart + blockSize - 1;
             }
@@ -261,7 +290,9 @@ namespace GlobeMapper.Services
 
             if (blockHeader == null)
                 SetMetaInt(sheetName, "blockCount", count - 1);
-            return true;
+            result = true;
+            }); // ComRetry
+            return result;
         }
 
         /// <summary>
@@ -559,18 +590,19 @@ namespace GlobeMapper.Services
             var rowCount = GetOwnerRowCount(attachSheetName, attachNum);
             var insertRow = dataStart + rowCount;
 
-            // 첫 데이터 행(테두리 템플릿)을 복사하여 삽입
-            dynamic templateRow = ws.Rows[dataStart];
-            templateRow.Copy();
+            // 클립보드를 비운 후 Insert → 빈 행 삽입 (클립보드가 있으면 Insert가 붙여넣기를 같이 해버림)
+            _app.CutCopyMode = false;
             ws.Rows[insertRow].Insert();
-            // 삽입된 행에 붙여넣기 (서식만)
-            dynamic destRow = ws.Rows[insertRow];
-            destRow.PasteSpecial(-4122); // xlPasteFormats = -4122
-            // 값 초기화
+
+            // 삽입된 빈 행에 서식 복사
+            ws.Rows[dataStart].Copy();
+            ws.Rows[insertRow].PasteSpecial(-4122); // xlPasteFormats = -4122
+            _app.CutCopyMode = false;
+
+            // 값 초기화 (PasteFormats가 내용을 복사하지 않지만 안전하게 비움)
             ws.Cells[insertRow, 2].ClearContents();
             ws.Cells[insertRow, 3].ClearContents();
             ws.Cells[insertRow, 4].ClearContents();
-            _app.CutCopyMode = false;
         }
 
         /// <summary>
@@ -598,38 +630,31 @@ namespace GlobeMapper.Services
         {
             dynamic ws = _workbook.Sheets[attachSheetName];
 
-            // 별첨1의 헤더행+데이터행 위치 (서식 복사용)
             var attach1Start = FindAttachSectionStart(ws, 1);
-            int headerRow = attach1Start >= 0 ? attach1Start + 2 : -1; // 헤더행 (유형/납세자번호/소유지분)
-            int templateDataRow = attach1Start >= 0 ? attach1Start + ATTACH_HEADER_ROWS : -1; // 첫 데이터행
+            if (attach1Start < 0) return;
 
-            // 마지막 사용 행 찾기
-            int lastRow = (int)ws.UsedRange.Row + (int)ws.UsedRange.Rows.Count;
+            // 마지막 사용 행 뒤에 1행 간격 두고 시작
+            int lastRow  = (int)ws.UsedRange.Row + (int)ws.UsedRange.Rows.Count;
+            int startRow = lastRow + 1;
 
-            var startRow = lastRow + 1; // 1행 간격
-            ws.Cells[startRow, 2] = $"첨부{attachNum}";
+            // 첨부1의 title+empty+header+첫 데이터행(4행)을 통째로 복사 → 폰트/테두리/행높이 완전 보존
+            int copyCount = ATTACH_HEADER_ROWS + ATTACH_INITIAL_DATA_ROWS; // 3+1=4
+            _app.CutCopyMode = false;
+            dynamic srcRange = ws.Range[ws.Cells[attach1Start, 1],
+                                        ws.Cells[attach1Start + copyCount - 1, 10]];
+            dynamic dstRange = ws.Range[ws.Cells[startRow, 1],
+                                        ws.Cells[startRow + copyCount - 1, 10]];
+            srcRange.Copy(dstRange);
 
-            // 헤더행: 별첨1의 헤더행 서식 복사
-            if (headerRow > 0)
-            {
-                dynamic srcHeader = ws.Rows[headerRow];
-                srcHeader.Copy();
-                ws.Rows[startRow + 2].PasteSpecial(-4104); // xlPasteAll
-            }
-            else
-            {
-                ws.Cells[startRow + 2, 2] = "유형";
-                ws.Cells[startRow + 2, 3] = "납세자번호";
-                ws.Cells[startRow + 2, 4] = "소유지분(%)";
-            }
+            // Range.Copy는 행 높이를 복사하지 않으므로 명시적 복사
+            for (int i = 0; i < copyCount; i++)
+                ws.Rows[startRow + i].RowHeight = ws.Rows[attach1Start + i].RowHeight;
 
-            // 데이터행 1개: 별첨1의 첫 데이터행 서식 복사 (값은 비움)
-            if (templateDataRow > 0)
-            {
-                dynamic srcData = ws.Rows[templateDataRow];
-                srcData.Copy();
-                ws.Rows[startRow + 3].PasteSpecial(-4122); // xlPasteFormats
-            }
+            // 제목 갱신 + 데이터 초기화
+            ws.Cells[startRow, 2].Value = $"첨부{attachNum}";
+            ws.Cells[startRow + ATTACH_HEADER_ROWS, 2].ClearContents();
+            ws.Cells[startRow + ATTACH_HEADER_ROWS, 3].ClearContents();
+            ws.Cells[startRow + ATTACH_HEADER_ROWS, 4].ClearContents();
 
             _app.CutCopyMode = false;
         }
@@ -907,6 +932,53 @@ namespace GlobeMapper.Services
 
         #endregion
 
+        #region 적용면제 첨부 시트 관리
+
+        private const string S2_ATTACH_SHEET = "적용면제 첨부";
+
+        /// <summary>
+        /// "적용면제 첨부" 시트에 새 첨부N 섹션 추가. 시트가 없으면 무시.
+        /// </summary>
+        public void AddSheet2AttachPage(int blockNum)
+        {
+            try { var _ = _workbook.Sheets[S2_ATTACH_SHEET]; }
+            catch { return; } // 시트 없으면 스킵
+            AddAttachSection(S2_ATTACH_SHEET, blockNum);
+        }
+
+        /// <summary>
+        /// "적용면제 첨부" 시트에서 마지막 첨부 섹션 삭제. 시트가 없으면 무시.
+        /// </summary>
+        public void RemoveSheet2AttachPage(int blockNum)
+        {
+            try { var _ = _workbook.Sheets[S2_ATTACH_SHEET]; }
+            catch { return; }
+            RemoveAttachSection(S2_ATTACH_SHEET, blockNum);
+        }
+
+        /// <summary>
+        /// "적용면제 첨부" 시트가 있으면 첨부 섹션 수 반환, 없으면 0.
+        /// </summary>
+        public int GetSheet2AttachPageCount()
+        {
+            dynamic ws;
+            try { ws = _workbook.Sheets[S2_ATTACH_SHEET]; }
+            catch { return 0; }
+
+            // 첨부N 헤더 행 수 카운트
+            int count = 0;
+            for (int r = 1; r <= 5000; r++)
+            {
+                string val = ws.Cells[r, 2].Value?.ToString()?.Trim();
+                if (string.IsNullOrEmpty(val) && r > 10) break;
+                if (val != null && System.Text.RegularExpressions.Regex.IsMatch(val, @"^첨부\d+$"))
+                    count++;
+            }
+            return count;
+        }
+
+        #endregion
+
         #region 1.3.3 단순 행 추가/삭제
 
         /// <summary>
@@ -1028,6 +1100,7 @@ namespace GlobeMapper.Services
             ("1.3.3",       "그룹구조 변동"),
             ("1.4",         "요약"),
             ("2",           "적용면제"),
+            ("UTPR",        "UTPR 배분"),
             ("3.1~3.2.3.2", "3.1~3.2.3.2"),
         };
 

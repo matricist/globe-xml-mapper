@@ -26,8 +26,8 @@ namespace GlobeMapper
         private const int UPE_BLOCK_START = 3;
         private const int UPE_BLOCK_END   = 11;
         private const int UPE_BLOCK_GAP   = 2;
-        private const int EX_BLOCK_START  = 3;
-        private const int EX_BLOCK_END    = 6;
+        private const int EX_BLOCK_START  = 2;
+        private const int EX_BLOCK_END    = 5;
         private const int EX_BLOCK_GAP    = 2;
         private const string ATTACH_SHEET_NAME = "그룹구조 첨부";
 
@@ -260,11 +260,18 @@ namespace GlobeMapper
             {
                 var count = _excel.GetRowBlockCount(sheetName);
                 y = AddSectionRow("국가별 적용면제", $"{count}개", y,
-                    () => { _excel.AddSheet2Block(sheetName); UpdateDynamicPanel(sheetName); },
+                    () =>
+                    {
+                        _excel.AddSheet2Block(sheetName);
+                        _excel.AddSheet2AttachPage(count + 1); // 새 첨부N 섹션 추가
+                        UpdateDynamicPanel(sheetName);
+                    },
                     () => {
                         if (count <= 1) { Warn("최소 1개는 유지해야 합니다."); return; }
                         if (!Confirm("마지막 페이지를 삭제하시겠습니까?")) return;
-                        _excel.RemoveSheet2Block(sheetName); UpdateDynamicPanel(sheetName);
+                        _excel.RemoveSheet2Block(sheetName);
+                        _excel.RemoveSheet2AttachPage(count); // 마지막 첨부 섹션 삭제
+                        UpdateDynamicPanel(sheetName);
                     });
                 y += 4;
                 y = AddActionButton("시트 초기화", Color.FromArgb(52, 52, 56), y, () =>
@@ -585,23 +592,26 @@ namespace GlobeMapper
 
         #endregion
 
-        #region 시트 트래커 (1초 폴링)
+        #region 시트 트래커 (2초 폴링)
 
         private void StartSheetTracker()
         {
-            _sheetTracker = new Timer { Interval = 1000 };
+            _sheetTracker = new Timer { Interval = 2000 };
             _sheetTracker.Tick += (s, e) =>
             {
+                // IsOpen 실패만 종료 카운트에 반영.
+                // 시트명 조회 등 이후 COM 실패는 Excel이 바쁜 상태일 뿐이므로 무시.
+                if (!_excel.IsOpen)
+                {
+                    _trackerFailCount++;
+                    // 2초 × 6 = 12초 연속 실패 시 종료
+                    if (_trackerFailCount >= 6) { _sheetTracker.Stop(); Close(); }
+                    return;
+                }
+                _trackerFailCount = 0;
+
                 try
                 {
-                    if (!_excel.IsOpen)
-                    {
-                        _trackerFailCount++;
-                        if (_trackerFailCount >= 3) { _sheetTracker.Stop(); Close(); }
-                        return;
-                    }
-                    _trackerFailCount = 0;
-
                     var current = _excel.GetActiveSheetName();
                     if (current == ExcelController.MetaSheetName)
                     {
@@ -615,11 +625,7 @@ namespace GlobeMapper
                         UpdateDynamicPanel(current);
                     }
                 }
-                catch
-                {
-                    _trackerFailCount++;
-                    if (_trackerFailCount >= 3) { _sheetTracker.Stop(); Close(); }
-                }
+                catch { /* Excel 일시적으로 바쁜 상태 — 무시 */ }
             };
             _sheetTracker.Start();
 

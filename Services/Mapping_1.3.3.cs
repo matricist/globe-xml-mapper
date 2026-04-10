@@ -22,17 +22,14 @@ namespace GlobeMapper.Services
             globe.GlobeBody.GeneralSection.CorporateStructure ??= new Globe.CorporateStructureType();
             var cs = globe.GlobeBody.GeneralSection.CorporateStructure;
 
-            var rowCount = 1;
-            if (ws.Workbook.TryGetWorksheet(ExcelController.MetaSheetName, out var metaWs))
-                rowCount = ExcelController.ReadBlockCount(metaWs, ws.Name);
+            var lastRow = ws.LastRowUsed()?.RowNumber() ?? DATA_START_ROW;
 
-            for (int i = 0; i < rowCount; i++)
+            for (int row = DATA_START_ROW; row <= lastRow; row++)
             {
-                var row = DATA_START_ROW + i;
 
-                // B: 구성기업 상호
+                // B: 구성기업 상호 (표시용, 매칭은 D열 TIN 기준)
                 var name = ws.Cell(row, 2).GetString()?.Trim();
-                // D: 납세자번호 ("번호,유형,국가" 형식)
+                // D: 납세자번호 — CE 매칭 기준 ("번호,유형,국가" 형식)
                 var tinRaw = ws.Cell(row, 4).GetString()?.Trim();
                 // F: 변동효력발생일
                 var dateRaw = ws.Cell(row, 6).GetString()?.Trim();
@@ -45,24 +42,26 @@ namespace GlobeMapper.Services
                 // P: 소유지분 보유 기업 유형 (OwnershipTypeEnumType)
                 var ownerTypeRaw = ws.Cell(row, 16).GetString()?.Trim();
 
-                if (string.IsNullOrEmpty(name) && string.IsNullOrEmpty(tinRaw)) continue;
+                if (string.IsNullOrEmpty(tinRaw)) continue;
 
-                // ── CE 찾기 ──────────────────────────────────────────────
-                var ce = FindCe(cs, name, tinRaw);
+                // ── CE 찾기 (2번 납세자번호 기준) ────────────────────────
+                var ce = FindCeByTin(cs, tinRaw);
                 if (ce == null)
                 {
-                    // 1.3.2.1에 없는 CE면 새로 생성
-                    ce = new Globe.CorporateStructureTypeCe { Id = new Globe.IdType() };
-                    if (!string.IsNullOrEmpty(name)) ce.Id.Name = name;
-                    if (!string.IsNullOrEmpty(tinRaw)) ce.Id.Tin.Add(ParseTin(tinRaw));
-                    cs.Ce.Add(ce);
+                    errors.Add($"[{fileName}] 행{row}: 1.3.2.1에 TIN '{tinRaw.Split(',')[0].Trim()}'인 CE 없음 — '{name}' 건너뜀");
+                    continue;
                 }
 
                 // ── OwnershipChange 생성 ──────────────────────────────────
                 var change = new Globe.CorporateStructureTypeCeOwnershipChange();
 
-                if (!string.IsNullOrEmpty(dateRaw) && DateTime.TryParse(dateRaw, out var changeDate))
-                    change.ChangeDate = changeDate;
+                if (!string.IsNullOrEmpty(dateRaw))
+                {
+                    if (DateTime.TryParse(dateRaw, out var changeDate))
+                        change.ChangeDate = changeDate;
+                    else
+                        errors.Add($"[{fileName}] 행{row}: 변동효력발생일 날짜 형식 오류 '{dateRaw}' (예: 2024-03-31)");
+                }
 
                 if (!string.IsNullOrEmpty(preTypeRaw))
                 {
@@ -91,8 +90,11 @@ namespace GlobeMapper.Services
                     }
 
                     if (!string.IsNullOrEmpty(prePctRaw)
-                        && decimal.TryParse(prePctRaw, out var prePct))
-                        preOwn.PreOwnershipPercentage = prePct / 100m;
+                        && decimal.TryParse(prePctRaw.TrimEnd('%').Trim(),
+                            System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            out var prePct))
+                        preOwn.PreOwnershipPercentage = prePct > 1m ? prePct / 100m : prePct;
 
                     change.PreOwnership.Add(preOwn);
                 }
@@ -101,14 +103,11 @@ namespace GlobeMapper.Services
             }
         }
 
-        private static Globe.CorporateStructureTypeCe FindCe(
-            Globe.CorporateStructureType cs, string name, string tinRaw)
+        private static Globe.CorporateStructureTypeCe FindCeByTin(
+            Globe.CorporateStructureType cs, string tinRaw)
         {
-            var tinValue = tinRaw?.Split(',')[0].Trim();
-
-            return cs.Ce.FirstOrDefault(c =>
-                (!string.IsNullOrEmpty(tinValue) && c.Id?.Tin.Any(t => t.Value == tinValue) == true)
-                || (!string.IsNullOrEmpty(name) && c.Id?.Name == name));
+            var tinValue = tinRaw.Split(',')[0].Trim();
+            return cs.Ce.FirstOrDefault(c => c.Id?.Tin.Any(t => t.Value == tinValue) == true);
         }
     }
 }

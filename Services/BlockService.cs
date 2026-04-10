@@ -30,7 +30,7 @@ namespace GlobeMapper.Services
             new("기업구조 변동",   "main",   "그룹구조 변동", SectionMode.SimpleRow, SimpleStartRow: 6),
             new("정보 요약",       "main",   "요약",          SectionMode.SimpleRow, SimpleStartRow: 4),
             new("구성기업",        "group",  "그룹구조",      SectionMode.Keyword,   Keyword: "1.3.2.1"),
-            new("제외기업",        "entity", "제외기업",      SectionMode.Fixed,     FixedStart: 3, FixedEnd: 6,  FixedGap: 2),
+            new("제외기업",        "entity", "제외기업",      SectionMode.Fixed,     FixedStart: 2, FixedEnd: 5,  FixedGap: 2),
             new("국가별 적용면제", "entity", "적용면제",      SectionMode.Fixed,     FixedStart: 2, FixedEnd: 53, FixedGap: 2),
         };
 

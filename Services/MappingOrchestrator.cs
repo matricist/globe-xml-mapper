@@ -18,6 +18,7 @@ namespace GlobeMapper.Services
             { "1.3.3",    () => new Mapping_1_3_3() },
             { "1.4",      () => new Mapping_1_4() },
             { "2",        () => new Mapping_2() },
+            { "UTPR",     () => new Mapping_Utpr() },
         };
 
         /// <summary>
@@ -219,6 +220,16 @@ namespace GlobeMapper.Services
                 {
                     DocTypeIndic = Globe.OecdDocTypeIndicEnumType.Oecd1,
                     DocRefId = $"{sendCC}{year}GS{ts}"
+                };
+            }
+
+            int utprIdx = 0;
+            foreach (var ua in globe.GlobeBody.UtprAttribution)
+            {
+                ua.DocSpec = new Globe.DocSpecType
+                {
+                    DocTypeIndic = Globe.OecdDocTypeIndicEnumType.Oecd1,
+                    DocRefId = $"{sendCC}{year}UA{utprIdx++}{ts}"
                 };
             }
         }
