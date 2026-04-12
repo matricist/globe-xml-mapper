@@ -169,11 +169,15 @@ mapper/
   - B(2)=주주CE TIN, E(5)=투자기업TIN, G(7)=ActualDeemedDist, K(11)=LocalCreditableTaxGross, N(14)=ShareOfUndistNetGlobeInc
   - Status/ElectionYear/RevocationYear: 3.2.4.3 h행(r5Year+5)에서 공통 적용
 - [x] 3.2.4.6: 그 밖의 회계기준 → CEComputation.OtherFas (K열, B열 TIN 매칭)
-- [ ] 3.4: 추가세액 배분과 귀속 (IIR/UTPR — LowTaxJurisdiction.Ltce/Utpr)
+- [x] 3.4.1: 소득산입규칙(IIR) 적용 → JurisdictionSection.LowTaxJurisdiction.Ltce[]
+  - 1.a,b,c: 주 시트 O(15)열 → Ltce.Tin / Iir.NetGlobeIncome / Iir.TopUpTax
+  - 2+3: "추가세액 첨부" 시트 B~H → IirParentEntity[] (TIN,ResCountryCode,OtherOwnershipAllocation,InclusionRatio,TopUpTaxShare,IirOffSet,TopUpTax)
+- [x] 3.4.2: 소득산입보완규칙(UTPR) → LowTaxJurisdiction.Utpr.UtprCalculation
+  - 2: O열 → Article251TopUpTax / 3: O열 → TotalUtprTopUpTax (1: TIN 정보성 — XML 미포함)
 
 ### ValidationUtil.cs 검증 커버리지
-- **구현됨**: 60001/03/04/11~13/15~23, 70001~03/05/07/09~21/26~28/32~34/38~40/60
-- **미구현 (주요)**: 70030/31(소유지분 TIN 교차검증), 70037(Subgroup TIN 일치), 70041~53(SafeHarbour 세부조건), 70054/56(RevocationYear=Status FALSE만), 70061~105(수치계산 검증)
+- **구현됨**: 60001/03/04/11~13/15~23, 70001~03/05/07/09~21/26~28/32~34/38~40/60, 70030/31, 70041~49/53/54, 70060~92, 70101~105
+- **미구현**: 70037(Subgroup TIN 일치), 70077/82(DeferTaxAdjustAmt 구조 복잡), 70097~100(3.4 IIR/UTPR 계산 — 구조 확인 필요)
 
 ## 참고
 Globe.cs 대신에 Globe요약.md 참고하면 편함

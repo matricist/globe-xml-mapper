@@ -136,6 +136,12 @@ namespace GlobeMapper.Services
 
             // ── 3.2.4.6 그 밖의 회계기준 ─────────────────────────────────────
             Map3246(ws, ceComp, errors, fileName);
+
+            // ── 3.4.1 소득산입규칙(IIR) 적용 ────────────────────────────────
+            Map341(ws, js, errors, fileName);
+
+            // ── 3.4.2 소득산입보완규칙(UTPR) 추가세액 ───────────────────────
+            Map342(ws, js, errors, fileName);
         }
 
         // ─── 3.2.4(a): row에서 K열 여/부 → Elections.SimplCalculations ──
@@ -1169,6 +1175,134 @@ namespace GlobeMapper.Services
             var result = matched ?? firstFound;
             if (!string.IsNullOrEmpty(result))
                 ceComp.OtherFas = result;
+        }
+
+        // ─── 3.4.1: 소득산입규칙(IIR) 적용 → JurisdictionSection.LowTaxJurisdiction ──
+        // 1. a,b,c → 주 시트 O(15)열 / 2+3 모기업 테이블 → "추가세액 첨부" 시트 B~H
+        private static void Map341(
+            IXLWorksheet ws,
+            Globe.JurisdictionSectionType js,
+            List<string> errors,
+            string fileName
+        )
+        {
+            var rSec = FindRow(ws, "3.4.1");
+            if (rSec < 0) return;
+
+            // 1. 추가세액 배분 그룹기업 (LTCE) a,b,c → O(15)열
+            // B열 "1. 추가세액 배분 그룹기업" 헤더 위치 = a 행 (merged cell 상단)
+            var rLtce = FindRow(ws, "1. 추가세액 배분", rSec);
+            if (rLtce < 0) return;
+
+            var tinRaw = ws.Cell(rLtce,     15).GetString()?.Trim(); // a: TIN
+            var ngiRaw = ws.Cell(rLtce + 1, 15).GetString()?.Trim(); // b: NetGlobeIncome
+            var tutRaw = ws.Cell(rLtce + 2, 15).GetString()?.Trim(); // c: TopUpTax
+            if (string.IsNullOrEmpty(tinRaw)) return;
+
+            // 첨부 시트 탐색: 3.4.1 구간의 O열에서 시트 참조 읽기
+            IXLWorksheet attachWs = null;
+            var rEnd = FindRow(ws, "3.4.2", rSec + 1);
+            if (rEnd < 0) rEnd = ws.LastRowUsed()?.RowNumber() ?? 500;
+            for (int r = rLtce; r <= rEnd; r++)
+            {
+                var oVal = ws.Cell(r, 15).GetString()?.Trim();
+                if (string.IsNullOrEmpty(oVal) || oVal == tinRaw || oVal == ngiRaw || oVal == tutRaw) continue;
+                if (ws.Workbook.TryGetWorksheet(oVal, out attachWs)) break;
+            }
+            if (attachWs == null) // 폴백: "첨부" 포함 시트 검색
+                attachWs = ws.Workbook.Worksheets
+                    .FirstOrDefault(s => s.Name != ws.Name && s.Name.Contains("첨부"));
+
+            // IIR 엔트리 생성
+            var iir = new Globe.LowTaxJurisdictionTypeLtceIir
+            {
+                NetGlobeIncome = string.IsNullOrEmpty(ngiRaw) ? null : ngiRaw,
+                TopUpTax = string.IsNullOrEmpty(tutRaw) ? "0" : tutRaw
+            };
+
+            // 모기업 테이블 (첨부 시트) → ParentEntity[]
+            if (attachWs != null)
+            {
+                var lastRow = attachWs.LastRowUsed()?.RowNumber() ?? 100;
+                // 헤더 행 건너뛰기: B열에 "모기업" 또는 "납세자번호" 포함 행 이후부터
+                int dataStart = 1;
+                for (int r = 1; r <= System.Math.Min(lastRow, 10); r++)
+                {
+                    var hdr = attachWs.Cell(r, 2).GetString();
+                    if (hdr != null && (hdr.Contains("모기업") || hdr.Contains("납세자번호")))
+                    { dataStart = r + 1; break; }
+                }
+                for (int r = dataStart; r <= lastRow; r++)
+                {
+                    var bRaw = attachWs.Cell(r, 2).GetString()?.Trim(); // B: 모기업 TIN
+                    var cRaw = attachWs.Cell(r, 3).GetString()?.Trim(); // C: 소재지국
+                    var dRaw = attachWs.Cell(r, 4).GetString()?.Trim(); // D: OtherOwnershipAllocation
+                    var eRaw = attachWs.Cell(r, 5).GetString()?.Trim(); // E: InclusionRatio
+                    var fRaw = attachWs.Cell(r, 6).GetString()?.Trim(); // F: TopUpTaxShare
+                    var gRaw = attachWs.Cell(r, 7).GetString()?.Trim(); // G: IirOffSet
+                    var hRaw = attachWs.Cell(r, 8).GetString()?.Trim(); // H: TopUpTax
+
+                    if (string.IsNullOrEmpty(bRaw) && string.IsNullOrEmpty(fRaw)) break;
+                    if (string.IsNullOrEmpty(bRaw)) continue;
+
+                    Globe.CountryCodeType cc = default;
+                    if (!string.IsNullOrEmpty(cRaw))
+                        System.Enum.TryParse(cRaw, true, out cc);
+
+                    decimal.TryParse(eRaw,
+                        System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out var inclusionRatio);
+
+                    iir.ParentEntity.Add(new Globe.LowTaxJurisdictionTypeLtceIirParentEntity
+                    {
+                        Tin                    = ParseTin(bRaw),
+                        ResCountryCode         = cc,
+                        OtherOwnershipAllocation = dRaw ?? "0",
+                        InclusionRatio         = inclusionRatio,
+                        TopUpTaxShare          = fRaw ?? "0",
+                        IirOffSet              = gRaw ?? "0",
+                        TopUpTax               = hRaw ?? "0"
+                    });
+                }
+            }
+
+            var ltce = new Globe.LowTaxJurisdictionTypeLtce { Tin = ParseTin(tinRaw) };
+            ltce.Iir.Add(iir);
+
+            js.LowTaxJurisdiction ??= new Globe.LowTaxJurisdictionType { TopUpTaxAmount = "0" };
+            js.LowTaxJurisdiction.Ltce.Add(ltce);
+        }
+
+        // ─── 3.4.2: 소득산입보완규칙(UTPR) → LowTaxJurisdiction.Utpr ─────────
+        // 1: 납세자번호(XML 미포함), 2: Article2.5.1TopUpTax, 3: TotalUTPRTopUpTax — 모두 O(15)열
+        private static void Map342(
+            IXLWorksheet ws,
+            Globe.JurisdictionSectionType js,
+            List<string> errors,
+            string fileName
+        )
+        {
+            var rSec = FindRow(ws, "3.4.2");
+            if (rSec < 0) return;
+
+            // 3.4.2.2: 제73조3항2호 → Article251TopUpTax
+            var r2 = FindRow(ws, "3항2호", rSec);
+            // 3.4.2.3: 소득산입보완규칙 추가세액 합계 → TotalUtprTopUpTax
+            var r3 = FindRow(ws, "소득산입보완규칙 추가세액 합계", rSec);
+            if (r3 < 0) r3 = FindRow(ws, "소득산입보완규칙", rSec + (r2 > 0 ? r2 - rSec + 1 : 1));
+
+            var art251   = r2 > 0 ? ws.Cell(r2, 15).GetString()?.Trim() : null;
+            var totalUtpr = r3 > 0 ? ws.Cell(r3, 15).GetString()?.Trim() : null;
+            if (string.IsNullOrEmpty(art251) && string.IsNullOrEmpty(totalUtpr)) return;
+
+            js.LowTaxJurisdiction ??= new Globe.LowTaxJurisdictionType { TopUpTaxAmount = "0" };
+            js.LowTaxJurisdiction.Utpr ??= new Globe.LowTaxJurisdictionTypeUtpr();
+            js.LowTaxJurisdiction.Utpr.UtprCalculation = new Globe.LowTaxJurisdictionTypeUtprUtprCalculation
+            {
+                Article251TopUpTax = art251   ?? "0",
+                TotalUtprTopUpTax  = totalUtpr ?? "0"
+            };
         }
 
         // 선택 사업연도(O=15)/취소 사업연도(Q=17) 읽기 헬퍼
