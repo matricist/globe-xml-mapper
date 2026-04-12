@@ -437,12 +437,12 @@ namespace GlobeMapper
 
         #region UI 헬퍼
 
-        // 섹션 행: [이름 ..........] [카운트] [+][-]
+        // 섹션 행: [이름 ..........] [카운트] [추가][삭제]
         private int AddSectionRow(string name, string countText, int y, Action onAdd, Action onRemove)
         {
             var w = _dynamicPanel.Width;
             const int BTN_W = 28;
-            const int BTN_H = 28;
+            const int BTN_H = 30;
             const int BTN_GAP = 4;
             var btnArea = BTN_W * 2 + BTN_GAP + 2; // 오른쪽 끝 2px 여백
             const int CNT_W = 54;
@@ -465,10 +465,10 @@ namespace GlobeMapper
                 TextAlign = ContentAlignment.MiddleRight
             });
 
-            var btnAdd = MakeIconButton("+",
+            var btnAdd = MakeIconButton("▲",
                 Color.FromArgb(88, 190, 110),
                 new Rectangle(w - btnArea, btnY, BTN_W, BTN_H), onAdd);
-            var btnRem = MakeIconButton("−",
+            var btnRem = MakeIconButton("▼",
                 Color.FromArgb(210, 80, 80),
                 new Rectangle(w - BTN_W - 2, btnY, BTN_W, BTN_H), onRemove);
 
@@ -485,7 +485,8 @@ namespace GlobeMapper
                 FlatStyle = FlatStyle.Flat,
                 ForeColor = iconColor,
                 BackColor = Color.FromArgb(52, 52, 56),
-                Font = new Font("Segoe UI", 12, FontStyle.Bold)
+                Font = new Font("Segoe UI", 7.5f),
+                Padding = Padding.Empty
             };
             btn.FlatAppearance.BorderSize = 1;
             btn.FlatAppearance.BorderColor = Color.FromArgb(68, 68, 74);

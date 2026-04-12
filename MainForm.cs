@@ -55,6 +55,7 @@ namespace GlobeMapper
         private static readonly Color FG_ACCENT = Color.FromArgb(86, 186, 240);
         private static readonly Color ACCENT    = Color.FromArgb(210, 160, 0);
         private static readonly Color PRIMARY   = Color.FromArgb(200, 90, 15);
+        private static readonly Color GRAY      = Color.FromArgb(78, 78, 88);
         private static readonly Color GREEN     = Color.FromArgb(40, 160, 80);
 
         public MainForm()
@@ -69,7 +70,7 @@ namespace GlobeMapper
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox     = false;
             StartPosition   = FormStartPosition.CenterScreen;
-            ClientSize      = new Size(480, 380);
+            ClientSize      = new Size(480, 420);
             BackColor       = BG;
             ForeColor       = FG;
             Font            = new Font("Segoe UI", 11f);
@@ -114,7 +115,7 @@ namespace GlobeMapper
             btnXml.Height = 48;
             btnXml.Margin = new Padding(0, 8, 0, 0);
 
-            var btnPanel = MakeBtn("서식 작업 시작", BtnSwitchToPanel_Click, primary: true);
+            var btnPanel = MakeBtn("MNE 서식 작업", BtnSwitchToPanel_Click, primary: true);
             btnPanel.Dock   = DockStyle.Top;
             btnPanel.Height = 48;
 
@@ -132,46 +133,35 @@ namespace GlobeMapper
             // 섹션 라벨
             var lblSection = new Label
             {
-                Text      = "새 서식 파일 만들기",
+                Text      = "템플릿 다운로드",
                 Height    = 28,
                 ForeColor = FG_ACCENT,
                 Font      = new Font("Segoe UI", 10f, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleLeft,
             };
 
-            // 3개 버튼 그리드
-            var grid = new TableLayoutPanel
-            {
-                ColumnCount = 3, RowCount = 1,
-                Height      = 60,
-                BackColor   = Color.Transparent,
-                Margin      = Padding.Empty, Padding = Padding.Empty,
-            };
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.3f));
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.3f));
-            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.4f));
-            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-            var btnMne   = MakeBtn("MNE 생성",    BtnCreateMne_Click,  primary: true);
-            var btnGroup = MakeBtn("합산단위 생성", BtnCreateGroup_Click, primary: true);
-            var btnCe    = MakeBtn("구성기업 생성", BtnCreateCe_Click,   primary: true);
-            btnMne.Dock   = DockStyle.Fill; btnMne.Font   = new Font("Segoe UI", 10.5f); btnMne.Margin   = new Padding(0, 0, 6, 0);
-            btnGroup.Dock = DockStyle.Fill; btnGroup.Font = new Font("Segoe UI", 10.5f); btnGroup.Margin = new Padding(3, 0, 3, 0);
-            btnCe.Dock    = DockStyle.Fill; btnCe.Font    = new Font("Segoe UI", 10.5f); btnCe.Margin    = new Padding(6, 0, 0, 0);
-
-            grid.Controls.Add(btnMne,   0, 0);
-            grid.Controls.Add(btnGroup, 1, 0);
-            grid.Controls.Add(btnCe,    2, 0);
+            // 3개 버튼 세로 배치 (회색 계열)
+            var btnMne   = MakeBtn("MNE",   BtnCreateMne_Click,  gray: true);
+            var btnGroup = MakeBtn("합산단위", BtnCreateGroup_Click, gray: true);
+            var btnCe    = MakeBtn("구성기업", BtnCreateCe_Click,   gray: true);
+            foreach (var b in new[] { btnMne, btnGroup, btnCe })
+                b.Font = new Font("Segoe UI", 11f);
 
             // 절대 배치
             content.Controls.Add(lblSection);
-            content.Controls.Add(grid);
+            content.Controls.Add(btnMne);
+            content.Controls.Add(btnGroup);
+            content.Controls.Add(btnCe);
 
             content.Resize += (s, e) =>
             {
-                var w = content.ClientSize.Width - content.Padding.Left - content.Padding.Right;
-                lblSection.SetBounds(0, 0, w, 28);
-                grid.SetBounds(0, 36, w, 60);
+                var x  = content.Padding.Left;
+                var y0 = content.Padding.Top;
+                var w  = content.ClientSize.Width - content.Padding.Left - content.Padding.Right;
+                lblSection.SetBounds(x, y0,       w, 28);
+                btnMne.SetBounds(    x, y0 + 36,  w, 40);
+                btnGroup.SetBounds(  x, y0 + 82,  w, 40);
+                btnCe.SetBounds(     x, y0 + 128, w, 40);
             };
 
             Controls.Add(content);
@@ -466,18 +456,19 @@ namespace GlobeMapper
         };
 
         private static Button MakeBtn(string text, EventHandler click,
-            bool accent = false, bool primary = false)
+            bool accent = false, bool primary = false, bool gray = false)
         {
-            var bg    = accent ? ACCENT : primary ? PRIMARY : BG3;
+            var bg    = accent ? ACCENT : primary ? PRIMARY : gray ? GRAY : BG3;
             var hover = accent  ? Color.FromArgb(225, 175, 10)
                       : primary ? Color.FromArgb(218, 105, 25)
+                      : gray    ? Color.FromArgb(98, 98, 108)
                       : Color.FromArgb(54, 54, 60);
             var btn = new Button
             {
                 Text      = text,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = bg,
-                ForeColor = (accent || primary) ? Color.White : FG,
+                ForeColor = (accent || primary || gray) ? Color.White : FG,
                 Font      = new Font("Segoe UI", 12f),
                 Cursor    = Cursors.Hand,
             };
