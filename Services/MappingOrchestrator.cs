@@ -19,6 +19,8 @@ namespace GlobeMapper.Services
             { "1.4",      () => new Mapping_1_4() },
             { "2",        () => new Mapping_2() },
             { "UTPR",     () => new Mapping_Utpr() },
+            { "JurCal",   () => new Mapping_JurCal() },
+            { "EntityCe", () => new Mapping_EntityCe() },
         };
 
         /// <summary>
@@ -49,60 +51,95 @@ namespace GlobeMapper.Services
 
         /// <summary>
         /// 프로젝트 폴더 기반 매핑.
-        /// 구조:
-        ///   root/MNE*.xlsx              → 1.x, 2 섹션 (최종모기업 파일)
-        ///   root/합산단위_N/합산단위_N.xlsx → 합산단위별 매핑
-        ///   root/구성기업_N.xlsx          → 구성기업별 매핑
+        ///   루트 디렉터리: main 파일 1개 (fileType=main 또는 xlsx 유일 파일)
+        ///   하위 디렉터리: group / entity 파일 (fileType으로 판별, 재귀)
         /// </summary>
         public List<string> MapFolder(string rootPath, Globe.GlobeOecd globe)
         {
             var errors = new List<string>();
 
-            // ── MNE 파일 (루트의 xlsx 중 임시파일 제외, 첫 번째) ─────────
-            var mneFiles = Directory.GetFiles(rootPath, "*.xlsx", SearchOption.TopDirectoryOnly)
+            // ── 루트의 main 파일 ───────────────────────────────────────────
+            var rootFiles = Directory.GetFiles(rootPath, "*.xlsx", SearchOption.TopDirectoryOnly)
                 .Where(f => !Path.GetFileName(f).StartsWith("~$"))
                 .OrderBy(f => f)
                 .ToList();
 
-            if (mneFiles.Count == 0)
+            if (rootFiles.Count == 0)
             {
                 errors.Add($"루트 폴더에 xlsx 파일이 없습니다. ({rootPath})");
                 return errors;
             }
-            if (mneFiles.Count > 1)
-                errors.Add($"루트 폴더에 xlsx 파일이 여러 개입니다. 첫 번째 파일만 사용합니다: {Path.GetFileName(mneFiles[0])}");
 
-            errors.AddRange(MapWorkbook(mneFiles[0], globe));
+            // main 파일은 루트에 1개여야 함
+            var mainFile = rootFiles.Count == 1
+                ? rootFiles[0]
+                : rootFiles.FirstOrDefault(f => ReadFileTypeFromXlsx(f, errors) == "main");
 
-            // ── 합산단위_N 하위 디렉터리 ──────────────────────────────────
-            var groupDirs = Directory.GetDirectories(rootPath, "합산단위_*")
-                .OrderBy(d => NaturalOrder(Path.GetFileName(d)))
-                .ToList();
-
-            foreach (var dir in groupDirs)
+            if (mainFile == null)
             {
-                var dirName = Path.GetFileName(dir);
-                var xlsxFiles = Directory.GetFiles(dir, "*.xlsx", SearchOption.TopDirectoryOnly)
-                    .Where(f => !Path.GetFileName(f).StartsWith("~$"))
-                    .OrderBy(f => f)
-                    .ToList();
-                if (xlsxFiles.Count == 0)
-                { errors.Add($"[{dirName}] xlsx 파일 없음"); continue; }
-                foreach (var f in xlsxFiles)
-                    MapFileBySheets(f, globe, errors);
+                errors.Add($"루트 폴더에서 main 파일(fileType=main)을 찾을 수 없습니다.");
+                return errors;
             }
+            if (rootFiles.Count > 1)
+                foreach (var f in rootFiles.Where(f => f != mainFile))
+                    errors.Add($"루트에 main 외 xlsx 파일 있음 (건너뜀): {Path.GetFileName(f)}");
 
-            // ── 구성기업_N.xlsx ───────────────────────────────────────────
-            var ceFiles = Directory.GetFiles(rootPath, "구성기업_*.xlsx", SearchOption.TopDirectoryOnly)
-                .Where(f => !Path.GetFileName(f).StartsWith("~$"))
-                .OrderBy(f => NaturalOrder(Path.GetFileName(f)))
+            errors.AddRange(MapWorkbook(mainFile, globe));
+
+            // ── 하위 디렉터리별 처리: 같은 폴더의 group → entity 순서 보장 ──
+            var subDirs = Directory.GetDirectories(rootPath, "*", SearchOption.AllDirectories)
+                .OrderBy(d => d)
                 .ToList();
 
-            foreach (var f in ceFiles)
-                MapFileBySheets(f, globe, errors);
+            foreach (var dir in subDirs)
+            {
+                var filesInDir = GetXlsxFiles(dir);
+                if (filesInDir.Count == 0) continue;
+
+                var typedFiles = filesInDir
+                    .Select(f => (path: f, type: ReadFileTypeFromXlsx(f, errors)))
+                    .ToList();
+
+                // group 먼저 처리 → 해당 폴더의 JurisdictionSection 생성
+                string groupFile = null;
+                foreach (var (path, _) in typedFiles.Where(x => x.type == "group"))
+                {
+                    MapFileBySheets(path, "group", globe, errors);
+                    groupFile = path;
+                }
+
+                // entity 파일: 같은 폴더 group 파일의 JurisdictionSection + ETR(SubGroup) 기준
+                var (jurCode, subGroupTin) = groupFile != null
+                    ? ReadGroupJurisdiction(groupFile, errors)
+                    : ((Globe.CountryCodeType?)null, (string)null);
+                foreach (var (path, _) in typedFiles.Where(x => x.type == "entity"))
+                    MapEntityFile(path, jurCode, subGroupTin, globe, errors);
+
+                foreach (var (path, type) in typedFiles.Where(x => x.type != "group" && x.type != "entity"))
+                    errors.Add($"[{Path.GetFileName(path)}] fileType='{type}' — 건너뜀 (group 또는 entity여야 함)");
+            }
 
             FillMessageSpec(globe);
             return errors;
+        }
+
+        /// <summary>
+        /// xlsx에서 _META.fileType 읽기 (ClosedXML). 읽기 실패 시 "unknown" 반환.
+        /// </summary>
+        private static string ReadFileTypeFromXlsx(string filePath, List<string> errors)
+        {
+            try
+            {
+                using var wb = new XLWorkbook(filePath);
+                if (!wb.TryGetWorksheet(ExcelController.MetaSheetName, out var meta))
+                    return "unknown";
+                return ExcelController.ReadFileType(meta);
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"[{Path.GetFileName(filePath)}] _META 읽기 오류: {ex.Message}");
+                return "unknown";
+            }
         }
 
         private static int NaturalOrder(string name)
@@ -112,19 +149,24 @@ namespace GlobeMapper.Services
         }
 
         /// <summary>
-        /// 파일 내 시트 이름을 MapperFactory에 직접 조회하여 매핑.
-        /// _META 없이 동작 (Group.xlsx, CE_N.xlsx용).
+        /// group / entity 파일 매핑.
+        /// fileType으로 코드에 정의된 FileTypeSheetMap을 사용.
         /// </summary>
-        private void MapFileBySheets(string filePath, Globe.GlobeOecd globe, List<string> errors)
+        private void MapFileBySheets(string filePath, string fileType, Globe.GlobeOecd globe, List<string> errors)
         {
             var fileName = Path.GetFileName(filePath);
+            if (!ExcelController.FileTypeSheetMap.TryGetValue(fileType, out var sheetMappings))
+            {
+                errors.Add($"[{fileName}] fileType='{fileType}'에 대한 시트 매핑 없음");
+                return;
+            }
             try
             {
                 using var workbook = new XLWorkbook(filePath);
-                foreach (var ws in workbook.Worksheets)
+                foreach (var (section, sheetName) in sheetMappings)
                 {
-                    if (!MapperFactory.TryGetValue(ws.Name, out var createMapper))
-                        continue; // 아직 매퍼 없는 시트는 스킵
+                    if (!MapperFactory.TryGetValue(section, out var createMapper)) continue;
+                    if (!workbook.TryGetWorksheet(sheetName, out var ws)) continue;
                     createMapper().Map(ws, globe, errors, fileName);
                 }
             }
@@ -132,6 +174,59 @@ namespace GlobeMapper.Services
             {
                 errors.Add($"[{fileName}] 파일 읽기 오류: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// group 파일("국가별 계산" 시트)에서 국가코드 + SubGroup TIN을 읽어 반환.
+        /// </summary>
+        private static (Globe.CountryCodeType? jurCode, string subGroupTin) ReadGroupJurisdiction(string filePath, List<string> errors)
+        {
+            try
+            {
+                using var wb = new XLWorkbook(filePath);
+                if (!wb.TryGetWorksheet("국가별 계산", out var ws)) return (null, null);
+                var lastRow = ws.LastRowUsed()?.RowNumber() ?? 300;
+                for (int r = 1; r <= lastRow; r++)
+                {
+                    var cell = ws.Cell(r, 2).GetString();
+                    if (cell != null && cell.Contains("3.1 국가별"))
+                    {
+                        var jurRaw = ws.Cell(r + 1, 15).GetString()?.Trim(); // +1: 국가코드
+                        var subGroupTin = ws.Cell(r + 3, 15).GetString()?.Trim(); // +3: SubGroup TIN
+                        Globe.CountryCodeType? code = null;
+                        if (!string.IsNullOrEmpty(jurRaw)
+                            && System.Enum.TryParse<Globe.CountryCodeType>(jurRaw, true, out var parsed))
+                            code = parsed;
+                        return (code, string.IsNullOrEmpty(subGroupTin) ? null : subGroupTin);
+                    }
+                }
+                return (null, null);
+            }
+            catch { return (null, null); }
+        }
+
+        /// <summary>
+        /// entity 파일을 처리. 같은 디렉토리 group 파일의 JurisdictionSection + ETR(SubGroup)에 CEComputation 추가.
+        /// </summary>
+        private void MapEntityFile(string filePath, Globe.CountryCodeType? jurCode, string subGroupTin, Globe.GlobeOecd globe, List<string> errors)
+        {
+            var fileName = Path.GetFileName(filePath);
+            if (!ExcelController.FileTypeSheetMap.TryGetValue("entity", out var sheetMappings)) return;
+            try
+            {
+                using var workbook = new XLWorkbook(filePath);
+                foreach (var (section, sheetName) in sheetMappings)
+                {
+                    if (!MapperFactory.TryGetValue(section, out var createMapper)) continue;
+                    if (!workbook.TryGetWorksheet(sheetName, out var ws)) continue;
+                    var mapper = createMapper();
+                    if (mapper is Mapping_EntityCe entityMapper)
+                        entityMapper.MapWithJur(ws, globe, errors, fileName, jurCode, subGroupTin);
+                    else
+                        mapper.Map(ws, globe, errors, fileName);
+                }
+            }
+            catch (Exception ex) { errors.Add($"[{fileName}] 파일 읽기 오류: {ex.Message}"); }
         }
 
         #region 내부 유틸

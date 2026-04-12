@@ -1091,6 +1091,7 @@ namespace GlobeMapper.Services
 
         #region 메타 시트 관리
 
+        // main_template 섹션→시트 매핑 (ControlPanel + _META용)
         internal static readonly (string section, string sheetName)[] SheetMap = new[]
         {
             ("1.1~1.2",     "다국적기업그룹 정보"),
@@ -1101,7 +1102,21 @@ namespace GlobeMapper.Services
             ("1.4",         "요약"),
             ("2",           "적용면제"),
             ("UTPR",        "UTPR 배분"),
-            ("3.1~3.2.3.2", "3.1~3.2.3.2"),
+            ("JurCal",      "3.1~3.2.3.2"),
+        };
+
+        // fileType별 섹션→시트 매핑 (MapFileBySheets용, 코드로 관리)
+        internal static readonly Dictionary<string, (string section, string sheetName)[]> FileTypeSheetMap = new()
+        {
+            ["group"] = new[]
+            {
+                ("JurCal", "국가별 계산"),
+                ("2",      "추가세액 계산"),
+            },
+            ["entity"] = new[]
+            {
+                ("EntityCe", "구성기업 계산"),
+            },
         };
 
         private void EnsureMetaSheet()
@@ -1118,8 +1133,9 @@ namespace GlobeMapper.Services
                 meta.Cells[1, 2] = "value";
             }
 
-            // 기존 blockCount 값 보존
+            // 기존 blockCount / fileType 값 보존
             var savedBlockCounts = new Dictionary<string, int>();
+            string savedFileType = null;
             var r = 2;
             while (true)
             {
@@ -1131,6 +1147,8 @@ namespace GlobeMapper.Services
                     if (int.TryParse((string)meta.Cells[r, 2].Value?.ToString(), out var cnt))
                         savedBlockCounts[name] = cnt;
                 }
+                else if (k == "fileType")
+                    savedFileType = meta.Cells[r, 2].Value?.ToString();
                 r++;
             }
 
@@ -1168,6 +1186,10 @@ namespace GlobeMapper.Services
                     row++;
                 }
             }
+
+            // fileType: 보존된 값 유지 (없으면 "main" 기본값)
+            meta.Cells[row, 1] = "fileType";
+            meta.Cells[row, 2] = savedFileType ?? "main";
         }
 
         private dynamic GetMetaSheet()
@@ -1276,6 +1298,23 @@ namespace GlobeMapper.Services
                 row++;
             }
             return result;
+        }
+
+        /// <summary>
+        /// _META에서 fileType 값 반환. "main" / "group" / "entity"
+        /// </summary>
+        public static string ReadFileType(ClosedXML.Excel.IXLWorksheet metaWs)
+        {
+            var row = 2;
+            while (true)
+            {
+                var key = metaWs.Cell(row, 1).GetString()?.Trim();
+                if (string.IsNullOrEmpty(key)) break;
+                if (key == "fileType")
+                    return metaWs.Cell(row, 2).GetString()?.Trim() ?? "main";
+                row++;
+            }
+            return "main"; // 기본값
         }
 
         public static int ReadBlockCount(ClosedXML.Excel.IXLWorksheet metaWs, string sheetName)

@@ -181,7 +181,8 @@ namespace GlobeMapper.Services
                 foreach (var entry in taxJurRaw.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
                 {
                     var jwr = ParseJwrEntry(entry, errors, fileName, loc);
-                    if (jwr != null) js.JurWithTaxingRights.Add(jwr);
+                    if (jwr == null) continue;
+                    js.JurWithTaxingRights.Add(jwr);
                 }
             }
 

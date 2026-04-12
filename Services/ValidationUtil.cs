@@ -20,9 +20,13 @@ namespace GlobeMapper.Services
             ValidateRecJurCode(globe, errors);
             ValidateUpe(globe, errors);
             ValidateCe(globe, errors);
+            ValidateCeOwnershipTin(globe, errors);
             ValidateRulesConsistency(globe, errors);
             ValidateTin(globe, errors);
             ValidateSummary(globe, errors);
+            ValidateSafeHarbourCompleteness(globe, errors);
+            ValidateJurisdictionSection(globe, errors);
+            ValidateUtprAttribution(globe, errors);
 
             return errors;
         }
@@ -655,6 +659,534 @@ namespace GlobeMapper.Services
                 }
             }
         }
+
+        #endregion
+
+        #region JurisdictionSection (70044~70098)
+
+        public static void ValidateJurisdictionSection(Globe.GlobeOecd globe, List<string> errors)
+        {
+            var periodEnd = globe.GlobeBody?.FilingInfo?.Period?.End ?? default;
+            var periodStart = globe.GlobeBody?.FilingInfo?.Period?.Start ?? default;
+
+            // 국가별 SafeHarbour 맵 (70045~53용)
+            var shMap = new Dictionary<string, HashSet<Globe.SafeHarbourEnumType>>();
+            foreach (var s in globe.GlobeBody?.Summary ?? Enumerable.Empty<Globe.SummaryType>())
+            {
+                if (s.Jurisdiction?.JurisdictionNameSpecified == true)
+                {
+                    var key = s.Jurisdiction.JurisdictionName.ToString();
+                    if (!shMap.ContainsKey(key)) shMap[key] = new HashSet<Globe.SafeHarbourEnumType>();
+                    foreach (var sh in s.SafeHarbour) shMap[key].Add(sh);
+                }
+            }
+
+            foreach (var js in globe.GlobeBody.JurisdictionSection)
+            {
+                var jur = js.Jurisdiction.ToString();
+                shMap.TryGetValue(jur, out var jurSh);
+                jurSh ??= new HashSet<Globe.SafeHarbourEnumType>();
+
+                foreach (var etr in js.GLoBeTax.Etr)
+                {
+                    // 70044: ETRStatus는 ETRException 또는 ETRComputation 중 하나 필수
+                    if (etr.EtrStatus != null
+                        && etr.EtrStatus.EtrException == null
+                        && etr.EtrStatus.EtrComputation == null)
+                        errors.Add($"[70044] [{jur}] ETRStatus에 ETRException 또는 ETRComputation 중 하나가 있어야 합니다.");
+
+                    var exc = etr.EtrStatus?.EtrException;
+                    var overall = etr.EtrStatus?.EtrComputation?.OverallComputation;
+
+                    // ── SafeHarbour → 필수 요소 검증 ────────────────────────────
+                    // 70045: GIR1203/1204/1205 → TransitionalCbCRSafeHarbour 필수
+                    if ((jurSh.Contains(Globe.SafeHarbourEnumType.Gir1203)
+                         || jurSh.Contains(Globe.SafeHarbourEnumType.Gir1204)
+                         || jurSh.Contains(Globe.SafeHarbourEnumType.Gir1205))
+                        && exc?.TransitionalCbCrSafeHarbour == null)
+                        errors.Add($"[70045] [{jur}] SafeHarbour GIR1203/1204/1205가 있으면 ETRException.TransitionalCbCRSafeHarbour 필수입니다.");
+
+                    // 70047: GIR1203 → Revenue 필수
+                    if (jurSh.Contains(Globe.SafeHarbourEnumType.Gir1203)
+                        && exc?.TransitionalCbCrSafeHarbour != null
+                        && string.IsNullOrEmpty(exc.TransitionalCbCrSafeHarbour.Revenue))
+                        errors.Add($"[70047] [{jur}] SafeHarbour GIR1203이면 TransitionalCbCRSafeHarbour.Revenue 필수입니다.");
+
+                    // 70048: GIR1204 → IncomeTax 필수
+                    if (jurSh.Contains(Globe.SafeHarbourEnumType.Gir1204)
+                        && exc?.TransitionalCbCrSafeHarbour != null
+                        && string.IsNullOrEmpty(exc.TransitionalCbCrSafeHarbour.IncomeTax))
+                        errors.Add($"[70048] [{jur}] SafeHarbour GIR1204이면 TransitionalCbCRSafeHarbour.IncomeTax 필수입니다.");
+
+                    // 70049: GIR1206 → UTPRSafeHarbour + CITRate 필수
+                    if (jurSh.Contains(Globe.SafeHarbourEnumType.Gir1206))
+                    {
+                        if (exc?.UtprSafeHarbour == null)
+                            errors.Add($"[70049] [{jur}] SafeHarbour GIR1206이면 ETRException.UTPRSafeHarbour 필수입니다.");
+                        else if (exc.UtprSafeHarbour.CitRate == 0)
+                            errors.Add($"[70049] [{jur}] SafeHarbour GIR1206이면 UTPRSafeHarbour.CITRate 필수입니다.");
+                    }
+
+                    // 70053: GIR1205 → SubstanceExclusion 필수 (NetGlobeIncome > 0인 경우)
+                    if (jurSh.Contains(Globe.SafeHarbourEnumType.Gir1205)
+                        && overall?.SubstanceExclusion == null)
+                    {
+                        var ngiTotal = Dec(overall?.NetGlobeIncome?.Total);
+                        if (ngiTotal > 0)
+                            errors.Add($"[70053] [{jur}] SafeHarbour GIR1205이면 SubstanceExclusion 필수입니다 (NetGlobeIncome > 0).");
+                    }
+
+                    if (overall == null) continue;
+
+                    // 70054: RevocationYear는 Status=FALSE일 때만 (JurisdictionSection Election)
+                    ValidateElectionRevocation(etr.Election, jur, errors);
+
+                    // ── NetGlobeIncome ────────────────────────────────────────
+                    // 70060: GIR2025 항목 있으면 IntShippingIncome 필수
+                    if (overall.NetGlobeIncome != null)
+                    {
+                        bool hasGir2025 = overall.NetGlobeIncome.Adjustments.Any(a =>
+                            a.AdjustmentItem == Globe.AdjustmentItemEnumType.Gir2025);
+                        if (hasGir2025 && overall.NetGlobeIncome.IntShippingIncome == null)
+                            errors.Add($"[70060] [{jur}] NetGlobeIncome에 GIR2025(국제해운소득) 항목이 있으면 IntShippingIncome을 작성해야 합니다.");
+                    }
+
+                    // ── AdjustedCoveredTax ────────────────────────────────────
+                    if (overall.AdjustedCoveredTax != null)
+                    {
+                        var act = overall.AdjustedCoveredTax;
+
+                        // 70061: Art4.6.1=TRUE → GIR2711 음수 항목 필수
+                        if (etr.Election?.Art461 == true)
+                        {
+                            bool hasGir2711Neg = act.Adjustments.Any(a =>
+                                a.AdjustmentItem == Globe.FinalAdjustedTaxEnumType.Gir2711
+                                && Dec(a.Amount) < 0);
+                            if (!hasGir2711Neg)
+                                errors.Add($"[70061] [{jur}] Art4.6.1 선택=TRUE이면 AdjustedCoveredTax에 GIR2711 음수 항목이 있어야 합니다.");
+                        }
+
+                        // 70062: GIR2720 있으면 AdjustedCoveredTax 총액 음수 불가
+                        bool hasGir2720 = act.Adjustments.Any(a =>
+                            a.AdjustmentItem == Globe.FinalAdjustedTaxEnumType.Gir2720);
+                        if (hasGir2720 && Dec(act.Total) < 0)
+                            errors.Add($"[70062] [{jur}] AdjustmentItem=GIR2720이 있으면 AdjustedCoveredTax 총액은 음수가 될 수 없습니다.");
+
+                        // ── PostFilingAdjust Year ─────────────────────────────
+                        if (act.PostFilingAdjust != null)
+                        {
+                            var dtAsset = act.PostFilingAdjust.DeferTaxAsset;
+                            if (dtAsset != null)
+                            {
+                                // 70066: Year ≤ Period Start YYYY
+                                var dtYears = dtAsset.AmountAttributed.Where(a => a.Year != default).ToList();
+                                foreach (var a in dtYears)
+                                    if (periodStart != default && a.Year.Year >= periodStart.Year)
+                                        errors.Add($"[70066] [{jur}] PostFilingAdjust.DeferTaxAsset.AmountAttributed.Year({a.Year:yyyy})은 기간 시작일({periodStart:yyyy}) 이전이어야 합니다.");
+                                // 70067: Year 중복 불가
+                                var dupYears = dtYears.GroupBy(a => a.Year.Year).Where(g => g.Count() > 1).Select(g => g.Key);
+                                foreach (var y in dupYears)
+                                    errors.Add($"[70067] [{jur}] PostFilingAdjust.DeferTaxAsset.AmountAttributed Year({y})가 중복됩니다.");
+                            }
+
+                            var ctRefund = act.PostFilingAdjust.CoveredTaxRefund;
+                            if (ctRefund != null)
+                            {
+                                // 70068: Year ≤ Period Start YYYY
+                                var ctYears = ctRefund.AmountAttributed.Where(a => a.Year != default).ToList();
+                                foreach (var a in ctYears)
+                                    if (periodStart != default && a.Year.Year >= periodStart.Year)
+                                        errors.Add($"[70068] [{jur}] PostFilingAdjust.CoveredTaxRefund.AmountAttributed.Year({a.Year:yyyy})은 기간 시작일({periodStart:yyyy}) 이전이어야 합니다.");
+                                // 70069: Year 중복 불가
+                                var dupCtYears = ctYears.GroupBy(a => a.Year.Year).Where(g => g.Count() > 1).Select(g => g.Key);
+                                foreach (var y in dupCtYears)
+                                    errors.Add($"[70069] [{jur}] PostFilingAdjust.CoveredTaxRefund.AmountAttributed Year({y})가 중복됩니다.");
+                            }
+                        }
+
+                        // ── DeemedDistTax Recapture ───────────────────────────
+                        if (act.DeemedDistTax?.Election?.Recapture != null)
+                        {
+                            foreach (var recapture in act.DeemedDistTax.Election.Recapture)
+                            {
+                                var recYear = recapture.Year;
+                                // 70070: Year ≤ Period End
+                                if (periodEnd != default && recYear != default && recYear > periodEnd)
+                                    errors.Add($"[70070] [{jur}] DeemedDistTax.Recapture.Year({recYear:yyyy-MM-dd})은 기간 종료일({periodEnd:yyyy-MM-dd}) 이후일 수 없습니다.");
+                                // 70071: Year ≥ Period End − 3년 (보고FY + 이전 3FY)
+                                if (periodEnd != default && recYear != default && recYear.Year < periodEnd.Year - 3)
+                                    errors.Add($"[70071] [{jur}] DeemedDistTax.Recapture.Year({recYear:yyyy})은 기간 종료일({periodEnd.Year})보다 4년 이상 이전일 수 없습니다.");
+
+                                // 70072: EndAmount = StartAmount - TotalDDT
+                                if (TryParseDec(recapture.StartAmount, out var start)
+                                    && TryParseDec(recapture.TotalDdt, out var total)
+                                    && TryParseDec(recapture.EndAmount, out var end))
+                                {
+                                    var expected = start - total;
+                                    if (Math.Abs(end - expected) > 0.01m)
+                                        errors.Add($"[70072] [{jur}] DeemedDistTax.Recapture.EndAmount({end})은 StartAmount({start}) - TotalDDT({total}) = {expected}여야 합니다.");
+                                }
+                                // 70073: EndAmount 음수 불가
+                                if (TryParseDec(recapture.EndAmount, out var endAmt) && endAmt < 0)
+                                    errors.Add($"[70073] [{jur}] DeemedDistTax.Recapture.EndAmount({endAmt})은 음수일 수 없습니다.");
+
+                                // 70074: TotalDDT = DDTYear0+1+2+3
+                                if (TryParseDec(recapture.DdtYear0, out var y0)
+                                    && TryParseDec(recapture.DdtYear1, out var y1)
+                                    && TryParseDec(recapture.DdtYear2, out var y2)
+                                    && TryParseDec(recapture.DdtYear3, out var y3)
+                                    && TryParseDec(recapture.TotalDdt, out var tDdt))
+                                {
+                                    var sumYears = y0 + y1 + y2 + y3;
+                                    if (Math.Abs(tDdt - sumYears) > 0.01m)
+                                        errors.Add($"[70074] [{jur}] DeemedDistTax.Recapture.TotalDDT({tDdt})은 DDTYear 합계({sumYears})와 일치해야 합니다.");
+                                }
+                                // 70075: Year=Period End YYYY이면 DDTYear*=0
+                                if (periodEnd != default && recYear.Year == periodEnd.Year)
+                                {
+                                    foreach (var (label, val) in new[] {
+                                        ("DDTYear-0", recapture.DdtYear0), ("DDTYear-1", recapture.DdtYear1),
+                                        ("DDTYear-2", recapture.DdtYear2), ("DDTYear-3", recapture.DdtYear3) })
+                                        if (Dec(val) != 0)
+                                            errors.Add($"[70075] [{jur}] DeemedDistTax.Recapture.Year이 기간 종료 연도와 같으면 {label}은 0이어야 합니다.");
+                                }
+                            }
+                        }
+
+                        // ── TransBlendCFC ─────────────────────────────────────
+                        var tblend = act.TransBlendCfc;
+                        if (tblend != null && !string.IsNullOrEmpty(tblend.Total))
+                        {
+                            // 70076: Total = Σ(CfcJur.Allocation.AggAllocTax)
+                            var sumAgg = tblend.CfcJur
+                                .Where(j => j.Allocation != null)
+                                .Sum(j => Dec(j.Allocation.AggAllocTax));
+                            if (TryParseDec(tblend.Total, out var tblendTotal)
+                                && Math.Abs(tblendTotal - sumAgg) > 0.01m)
+                                errors.Add($"[70076] [{jur}] TransBlendCFC.Total({tblendTotal})은 CfcJur Allocation.AggAllocTax 합계({sumAgg})와 일치해야 합니다.");
+                        }
+                    }
+
+                    // ── ExcessNegTaxExpense ───────────────────────────────────
+                    var exNeg = overall.ExcessNegTaxExpense;
+                    var adjCovTax = overall.AdjustedCoveredTax;
+                    if (exNeg != null && adjCovTax != null)
+                    {
+                        // 70084: GIR2719 Amount = GeneratedInRFY
+                        var gir2719 = adjCovTax.Adjustments.FirstOrDefault(a =>
+                            a.AdjustmentItem == Globe.FinalAdjustedTaxEnumType.Gir2719);
+                        if (gir2719 != null && !string.IsNullOrEmpty(exNeg.GeneratedInRfy)
+                            && TryParseDec(gir2719.Amount, out var amt2719)
+                            && TryParseDec(exNeg.GeneratedInRfy, out var genRfy)
+                            && Math.Abs(amt2719 - genRfy) > 0.01m)
+                            errors.Add($"[70084] [{jur}] AdjustmentItem=GIR2719의 Amount({amt2719})은 ExcessNegTaxExpense.GeneratedInRFY({genRfy})와 일치해야 합니다.");
+
+                        // 70085: GIR2720 Amount = UtilizedInRFY
+                        var gir2720 = adjCovTax.Adjustments.FirstOrDefault(a =>
+                            a.AdjustmentItem == Globe.FinalAdjustedTaxEnumType.Gir2720);
+                        if (gir2720 != null && !string.IsNullOrEmpty(exNeg.UtilizedInRfy)
+                            && TryParseDec(gir2720.Amount, out var amt2720)
+                            && TryParseDec(exNeg.UtilizedInRfy, out var utilRfy)
+                            && Math.Abs(amt2720 - utilRfy) > 0.01m)
+                            errors.Add($"[70085] [{jur}] AdjustmentItem=GIR2720의 Amount({amt2720})은 ExcessNegTaxExpense.UtilizedInRFY({utilRfy})와 일치해야 합니다.");
+                    }
+
+                    // ── SubstanceExclusion / ExcessProfits ────────────────────
+                    // 70087: SubstanceExclusion.Total = PayrollCost*PayrollMarkUp + TangibleAssetValue*TangibleAssetMarkup
+                    if (overall.SubstanceExclusion != null
+                        && TryParseDec(overall.SubstanceExclusion.Total, out var sbieTot)
+                        && TryParseDec(overall.SubstanceExclusion.PayrollCost, out var payroll)
+                        && TryParseDec(overall.SubstanceExclusion.TangibleAssetValue, out var tangible))
+                    {
+                        var payMarkup = overall.SubstanceExclusion.PayrollMarkUp;
+                        var tangMarkup = overall.SubstanceExclusion.TangibleAssetMarkup;
+                        var expectedSbie = payroll * payMarkup + tangible * tangMarkup;
+                        if (Math.Abs(sbieTot - expectedSbie) > 1m)
+                            errors.Add($"[70087] [{jur}] SubstanceExclusion.Total({sbieTot})은 PayrollCost×MarkUp + TangibleAsset×MarkUp = {expectedSbie:F2}여야 합니다.");
+                    }
+
+                    // 70086: ExcessProfits = max(0, NetGlobeIncome/Total - SubstanceExclusion/Total)
+                    if (!string.IsNullOrEmpty(overall.ExcessProfits)
+                        && TryParseDec(overall.ExcessProfits, out var exProfit)
+                        && TryParseDec(overall.NetGlobeIncome?.Total, out var ngiTot))
+                    {
+                        var sbie = Dec(overall.SubstanceExclusion?.Total);
+                        var expected86 = Math.Max(0, ngiTot - sbie);
+                        if (Math.Abs(exProfit - expected86) > 1m)
+                            errors.Add($"[70086] [{jur}] ExcessProfits({exProfit})은 max(0, NetGlobeIncome.Total({ngiTot}) - SubstanceExclusion.Total({sbie})) = {expected86:F2}여야 합니다.");
+                    }
+
+                    // ── Art4.1.5 ─────────────────────────────────────────────
+                    if (TryParseDec(overall.NetGlobeIncome?.Total, out var ngiForArt) && ngiForArt < 0)
+                    {
+                        // 70088: NetGlobeIncome < 0이면 Art4.1.5 필수
+                        if (overall.AdditionalTopUpTax?.Art415 == null)
+                            errors.Add($"[70088] [{jur}] NetGlobeIncome.Total({ngiForArt})이 음수이면 AdditionalTopUpTax.Art4.1.5 필수입니다.");
+                    }
+
+                    var art415 = overall.AdditionalTopUpTax?.Art415;
+                    if (art415 != null)
+                    {
+                        // 70089: AdjustedCoveredTax 음수여야 함
+                        if (TryParseDec(art415.AdjustedCoveredTax, out var art415Act) && art415Act >= 0)
+                            errors.Add($"[70089] [{jur}] Art4.1.5.AdjustedCoveredTax({art415Act})은 음수여야 합니다.");
+
+                        // 70090: GlobeLoss = NetGlobeIncome/Total
+                        if (TryParseDec(art415.GlobeLoss, out var globeLoss)
+                            && TryParseDec(overall.NetGlobeIncome?.Total, out var ngiCheck)
+                            && Math.Abs(globeLoss - ngiCheck) > 0.01m)
+                            errors.Add($"[70090] [{jur}] Art4.1.5.GlobeLoss({globeLoss})은 NetGlobeIncome.Total({ngiCheck})와 일치해야 합니다.");
+
+                        // 70091: ExpectedAdjustedCoveredTax = GlobeLoss × 15%
+                        if (TryParseDec(art415.GlobeLoss, out var gl91)
+                            && TryParseDec(art415.ExpectedAdjustedCoveredTax, out var eact))
+                        {
+                            var exp91 = gl91 * 0.15m;
+                            if (Math.Abs(eact - exp91) > 1m)
+                                errors.Add($"[70091] [{jur}] Art4.1.5.ExpectedAdjustedCoveredTax({eact})은 GlobeLoss({gl91}) × 15% = {exp91:F2}여야 합니다.");
+                        }
+
+                        // 70092: AdditionalTopUpTax = max(0, ExpectedAdjustedCoveredTax - AdjustedCoveredTax)
+                        if (TryParseDec(art415.ExpectedAdjustedCoveredTax, out var eact92)
+                            && TryParseDec(art415.AdjustedCoveredTax, out var act92)
+                            && TryParseDec(art415.AdditionalTopUpTax, out var addt92))
+                        {
+                            var exp92 = Math.Max(0, eact92 - act92);
+                            if (Math.Abs(addt92 - exp92) > 1m)
+                                errors.Add($"[70092] [{jur}] Art4.1.5.AdditionalTopUpTax({addt92})은 max(0, ExpectedACT({eact92}) - ACT({act92})) = {exp92:F2}여야 합니다.");
+                        }
+                    }
+
+                    // ── NONArt4.1.5 ──────────────────────────────────────────
+                    foreach (var non in overall.AdditionalTopUpTax?.NonArt415
+                             ?? Enumerable.Empty<Globe.EtrComputationTypeOverallComputationAdditionalTopUpTaxNonArt415>())
+                    {
+                        // 70093: Year ≤ Period End YYYY
+                        if (periodEnd != default && non.Year != default && non.Year.Year > periodEnd.Year)
+                            errors.Add($"[70093] [{jur}] NONArt4.1.5.Year({non.Year.Year})은 기간 종료 연도({periodEnd.Year}) 이후일 수 없습니다.");
+
+                        // 70094: Articles=GIR2605 → Year은 최소 4년 이전
+                        if (non.Articles.Contains(Globe.NonArt415EnumType.Gir2605)
+                            && periodEnd != default && non.Year != default
+                            && non.Year.Year > periodEnd.Year - 4)
+                            errors.Add($"[70094] [{jur}] NONArt4.1.5 Articles=GIR2605이면 Year({non.Year.Year})은 기간 종료({periodEnd.Year})보다 최소 4년 이전이어야 합니다.");
+
+                        // 70095: Articles=GIR2602 → Year = 5번째 이전 FY
+                        if (non.Articles.Contains(Globe.NonArt415EnumType.Gir2602)
+                            && periodEnd != default && non.Year != default
+                            && non.Year.Year != periodEnd.Year - 5)
+                            errors.Add($"[70095] [{jur}] NONArt4.1.5 Articles=GIR2602이면 Year({non.Year.Year})은 기간 종료 연도({periodEnd.Year}) - 5 = {periodEnd.Year - 5}이어야 합니다.");
+
+                        // 70096: AdditionalTopUpTax = Recalculated.TopUpTax - Previous.TopUpTax
+                        if (non.Previous != null && non.Recalculated != null
+                            && TryParseDec(non.Recalculated.TopUpTax, out var recalc)
+                            && TryParseDec(non.Previous.TopUpTax, out var prev)
+                            && TryParseDec(non.AdditionalTopUpTax, out var addt96))
+                        {
+                            var exp96 = recalc - prev;
+                            if (Math.Abs(addt96 - exp96) > 1m)
+                                errors.Add($"[70096] [{jur}] NONArt4.1.5.AdditionalTopUpTax({addt96})은 Recalculated.TopUpTax({recalc}) - Previous.TopUpTax({prev}) = {exp96:F2}여야 합니다.");
+                        }
+                    }
+                }
+            }
+        }
+
+        // 70054/56: JurisdictionSection Election의 RevocationYear 검증
+        private static void ValidateElectionRevocation(Globe.EtrTypeElection election, string jur, List<string> errors)
+        {
+            if (election == null) return;
+
+            void Check(string name, bool status, bool rvSpecified)
+            {
+                if (rvSpecified && status)
+                    errors.Add($"[70054] [{jur}/Election/{name}] RevocationYear는 Status=FALSE(선택 철회)일 때만 제공해야 합니다.");
+            }
+
+            if (election.Art321C != null)
+                Check("Art3.2.1.c", election.Art321C.Status, election.Art321C.RevocationYearSpecified);
+        }
+
+        #endregion
+
+        #region SafeHarbour 완전성 (70041~43)
+
+        private static void ValidateSafeHarbourCompleteness(Globe.GlobeOecd globe, List<string> errors)
+        {
+            var body = globe.GlobeBody;
+            if (body?.Summary == null) return;
+
+            var cfs = body.FilingInfo?.AccountingInfo?.CfSofUpe;
+
+            foreach (var summary in body.Summary)
+            {
+                var jurName = summary.Jurisdiction?.JurisdictionNameSpecified == true
+                    ? summary.Jurisdiction.JurisdictionName.ToString() : "(국가 없음)";
+
+                // 70041: CFSofUPE=GIR502/GIR504이면 GIR1207/1208/1209 불가
+                if ((cfs == Globe.FilingCeCofUpeEnumType.Gir502 || cfs == Globe.FilingCeCofUpeEnumType.Gir504)
+                    && summary.SafeHarbour.Any(s => s == Globe.SafeHarbourEnumType.Gir1207
+                        || s == Globe.SafeHarbourEnumType.Gir1208
+                        || s == Globe.SafeHarbourEnumType.Gir1209))
+                    errors.Add($"[70041] [1.4 요약/{jurName}] CFSofUPE가 GIR502/GIR504이면 SafeHarbour에 GIR1207/1208/1209를 사용할 수 없습니다.");
+
+                bool hasJurTaxing = summary.JurWithTaxingRightsSpecified;
+
+                // 70042: JurWithTaxingRights 있고 SafeHarbour 없음(또는 GIR1206만) → 4개 필수
+                bool onlyGir1206orNone = !summary.SafeHarbour.Any()
+                    || (summary.SafeHarbour.Count == 1 && summary.SafeHarbour[0] == Globe.SafeHarbourEnumType.Gir1206);
+                if (hasJurTaxing && onlyGir1206orNone)
+                {
+                    if (!summary.EtrRangeSpecified)
+                        errors.Add($"[70042] [1.4 요약/{jurName}] JurWithTaxingRights 작성 시 ETRRange 필수입니다.");
+                    if (summary.Sbie == null)
+                        errors.Add($"[70042] [1.4 요약/{jurName}] JurWithTaxingRights 작성 시 SBIE 필수입니다.");
+                    if (!summary.QdmtTutSpecified)
+                        errors.Add($"[70042] [1.4 요약/{jurName}] JurWithTaxingRights 작성 시 QDMTTut 필수입니다.");
+                    if (!summary.GLoBeTutSpecified)
+                        errors.Add($"[70042] [1.4 요약/{jurName}] JurWithTaxingRights 작성 시 GLoBETut 필수입니다.");
+                }
+
+                // 70043: JurWithTaxingRights 있고 SafeHarbour=GIR1202 → ETRRange/SBIE/QDMTTut 필수
+                if (hasJurTaxing && summary.SafeHarbour.Contains(Globe.SafeHarbourEnumType.Gir1202))
+                {
+                    if (!summary.EtrRangeSpecified)
+                        errors.Add($"[70043] [1.4 요약/{jurName}] SafeHarbour=GIR1202이면 ETRRange 필수입니다.");
+                    if (summary.Sbie == null)
+                        errors.Add($"[70043] [1.4 요약/{jurName}] SafeHarbour=GIR1202이면 SBIE 필수입니다.");
+                    if (!summary.QdmtTutSpecified)
+                        errors.Add($"[70043] [1.4 요약/{jurName}] SafeHarbour=GIR1202이면 QDMTTut 필수입니다.");
+                }
+            }
+        }
+
+        #endregion
+
+        #region Ownership TIN 교차검증 (70030, 70031)
+
+        private static void ValidateCeOwnershipTin(Globe.GlobeOecd globe, List<string> errors)
+        {
+            var corpStructure = globe.GlobeBody?.GeneralSection?.CorporateStructure;
+            if (corpStructure == null) return;
+
+            // 전체 CorporateStructure TIN 목록 (CE + UPE)
+            var allTins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var upe in corpStructure.Upe)
+            {
+                foreach (var t in upe.OtherUpe?.Id?.Tin ?? Enumerable.Empty<Globe.TinType>())
+                    if (!string.IsNullOrEmpty(t.Value) && t.Value != "NOTIN") allTins.Add(t.Value);
+                foreach (var t in upe.ExcludedUpe?.Id?.Tin ?? Enumerable.Empty<Globe.TinType>())
+                    if (!string.IsNullOrEmpty(t.Value) && t.Value != "NOTIN") allTins.Add(t.Value);
+            }
+            foreach (var ce in corpStructure.Ce)
+                foreach (var t in ce.Id?.Tin ?? Enumerable.Empty<Globe.TinType>())
+                    if (!string.IsNullOrEmpty(t.Value) && t.Value != "NOTIN") allTins.Add(t.Value);
+
+            // GIR306(Main Entity) TIN 목록 (70031용)
+            var mainEntityTins = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var ce in corpStructure.Ce)
+                if (ce.Id?.GlobeStatus?.Contains(Globe.IdTypeGloBeStatusEnumType.Gir306) == true)
+                    foreach (var t in ce.Id?.Tin ?? Enumerable.Empty<Globe.TinType>())
+                        if (!string.IsNullOrEmpty(t.Value)) mainEntityTins.Add(t.Value);
+
+            // OwnershipType: CE(GIR801)/JV(GIR803)/JV Subsidiary(GIR804)는 TIN이 CorporateStructure와 일치해야 함
+            var ceOwnerTypes = new HashSet<Globe.OwnershipTypeEnumType>
+            {
+                Globe.OwnershipTypeEnumType.Gir801,
+                Globe.OwnershipTypeEnumType.Gir803,
+                Globe.OwnershipTypeEnumType.Gir804
+            };
+
+            foreach (var ce in corpStructure.Ce)
+            {
+                var ceName = ce.Id?.Name ?? "(이름없음)";
+                var loc = $"1.3.2.1 구성기업/'{ceName}'";
+                var statuses = ce.Id?.GlobeStatus;
+
+                foreach (var own in ce.Ownership)
+                {
+                    var tinVal = own.Tin?.Value;
+                    if (string.IsNullOrEmpty(tinVal) || tinVal.Equals("NOTIN", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    // 70030: CE/JV/JV Subsidiary OwnershipType이면 TIN이 CorporateStructure에 있어야 함
+                    if (ceOwnerTypes.Contains(own.OwnershipType) && !allTins.Contains(tinVal))
+                        errors.Add($"[70030] [{loc}/Ownership] OwnershipType({own.OwnershipType})이 CE/JV인 경우 TIN('{tinVal}')은 기업구조에 신고된 TIN과 일치해야 합니다.");
+
+                    // 70031: GIR305(PE)이면 Ownership TIN이 GIR306(Main Entity) TIN과 일치해야 함
+                    if (statuses?.Contains(Globe.IdTypeGloBeStatusEnumType.Gir305) == true
+                        && mainEntityTins.Count > 0
+                        && !mainEntityTins.Contains(tinVal))
+                        errors.Add($"[70031] [{loc}/Ownership] GIR305(고정사업장)이면 Ownership TIN('{tinVal}')은 GIR306(본점) CE의 TIN({string.Join("/", mainEntityTins)})과 일치해야 합니다.");
+                }
+            }
+        }
+
+        #endregion
+
+        #region UTPRAttribution (70099~105)
+
+        private static void ValidateUtprAttribution(Globe.GlobeOecd globe, List<string> errors)
+        {
+            var body = globe.GlobeBody;
+            if (body == null) return;
+
+            var utprList = body.UtprAttribution;
+            if (utprList == null || utprList.Count == 0) return;
+
+            var allAttribs = utprList.SelectMany(u => u.Attribution).ToList();
+
+            // 70104: UTPRTopUpTaxCarriedForward 음수 불가
+            foreach (var attrib in allAttribs)
+            {
+                if (TryParseDec(attrib.UtprTopUpTaxCarriedForward, out var carried) && carried < 0)
+                    errors.Add($"[70104] [UTPRAttribution/{attrib.ResCountryCode}] UTPRTopUpTaxCarriedForward({carried})은 음수일 수 없습니다.");
+
+                // 70101: CarryForward ≠ 0이면 Employees 필수
+                if (TryParseDec(attrib.UtprTopUpTaxCarryForward, out var carryFwd) && carryFwd != 0
+                    && string.IsNullOrEmpty(attrib.Employees))
+                    errors.Add($"[70101] [UTPRAttribution/{attrib.ResCountryCode}] UTPRTopUpTaxCarryForward≠0이면 Employees 필수입니다.");
+
+                // 70102: CarryForward ≠ 0이면 TangibleAssetValue 필수
+                if (TryParseDec(attrib.UtprTopUpTaxCarryForward, out var cf2) && cf2 != 0
+                    && string.IsNullOrEmpty(attrib.TangibleAssetValue))
+                    errors.Add($"[70102] [UTPRAttribution/{attrib.ResCountryCode}] UTPRTopUpTaxCarryForward≠0이면 TangibleAssetValue 필수입니다.");
+
+                // 70103: CarryForward > 0이면 UTPRPercentage = 0
+                if (TryParseDec(attrib.UtprTopUpTaxCarryForward, out var cf3) && cf3 > 0
+                    && attrib.UtprPercentage != 0)
+                    errors.Add($"[70103] [UTPRAttribution/{attrib.ResCountryCode}] UTPRTopUpTaxCarryForward>0이면 UTPRPercentage는 0%이어야 합니다.");
+
+                // 70105: CarriedForward = CarryForward + Attributed - AddCashTaxExpense
+                if (TryParseDec(attrib.UtprTopUpTaxCarryForward, out var cf)
+                    && TryParseDec(attrib.UtprTopUpTaxAttributed, out var attr)
+                    && TryParseDec(attrib.AddCashTaxExpense, out var cash)
+                    && TryParseDec(attrib.UtprTopUpTaxCarriedForward, out var cfwd))
+                {
+                    var expected = cf + attr - cash;
+                    if (Math.Abs(cfwd - expected) > 0.01m)
+                        errors.Add($"[70105] [UTPRAttribution/{attrib.ResCountryCode}] UTPRTopUpTaxCarriedForward({cfwd})은 CarryForward({cf})+Attributed({attr})-AddCashTaxExpense({cash})={expected}여야 합니다.");
+                }
+            }
+
+            // 70099: Σ(UTPRTopUpTaxAttributed) = Σ(TotalUTPRTopUpTax across all jurisdictions)
+            // (TotalUTPRTopUpTax는 JurisdictionSection 내 UTPR 계산 결과 — 현재 미구현 섹션이므로 skip)
+        }
+
+        #endregion
+
+        #region 숫자 파싱 헬퍼
+
+        private static bool TryParseDec(string s, out decimal result)
+        {
+            result = 0;
+            if (string.IsNullOrEmpty(s)) return false;
+            return decimal.TryParse(s.Replace(",", ""),
+                System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out result);
+        }
+
+        private static decimal Dec(string s) => TryParseDec(s, out var v) ? v : 0m;
 
         #endregion
     }

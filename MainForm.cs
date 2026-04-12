@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
+using ClosedXML.Excel;
 using GlobeMapper.Services;
 
 namespace GlobeMapper
@@ -13,6 +14,36 @@ namespace GlobeMapper
 
         private static readonly string TemplatePath = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, "Resources", "main_template.xlsx");
+        private static readonly string GroupTemplatePath = Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory, "Resources", "group_template.xlsx");
+        private static readonly string EntityTemplatePath = Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory, "Resources", "entity_template.xlsx");
+
+        // _META 시트에 fileType 기록 (ClosedXML로 파일만 수정, Excel 열지 않음)
+        private static void WriteFileType(string xlsxPath, string fileType)
+        {
+            using var wb = new XLWorkbook(xlsxPath);
+            IXLWorksheet meta;
+            if (!wb.TryGetWorksheet(ExcelController.MetaSheetName, out meta))
+            {
+                meta = wb.AddWorksheet(ExcelController.MetaSheetName);
+                meta.Cell(1, 1).Value = "key";
+                meta.Cell(1, 2).Value = "value";
+            }
+            // 기존 fileType 항목 갱신 또는 추가
+            int row = 2;
+            while (true)
+            {
+                var k = meta.Cell(row, 1).GetString()?.Trim();
+                if (string.IsNullOrEmpty(k)) break;
+                if (k == "fileType") { meta.Cell(row, 2).Value = fileType; wb.Save(); return; }
+                row++;
+            }
+            meta.Cell(row, 1).Value = "fileType";
+            meta.Cell(row, 2).Value = fileType;
+            meta.Visibility = XLWorksheetVisibility.VeryHidden;
+            wb.Save();
+        }
 
         // ── 색상 상수 ──────────────────────────────────────────────────────
         private static readonly Color BG        = Color.FromArgb(30, 30, 32);
@@ -214,8 +245,8 @@ namespace GlobeMapper
 
         private void BtnCreateGroup_Click(object sender, EventArgs e)
         {
-            if (!File.Exists(TemplatePath))
-            { ShowError($"템플릿 파일을 찾을 수 없습니다.\n{TemplatePath}"); return; }
+            if (!File.Exists(GroupTemplatePath))
+            { ShowError($"템플릿 파일을 찾을 수 없습니다.\n{GroupTemplatePath}"); return; }
 
             // 저장 폴더 선택
             using var folderDlg = new FolderBrowserDialog
@@ -236,23 +267,28 @@ namespace GlobeMapper
                     var subDir = Path.Combine(folderDlg.SelectedPath, $"합산단위_{i}");
                     Directory.CreateDirectory(subDir);
                     var dest = Path.Combine(subDir, $"합산단위_{i}.xlsx");
-                    File.Copy(TemplatePath, dest, overwrite: true);
+                    File.Copy(GroupTemplatePath, dest, overwrite: true);
+                    WriteFileType(dest, "group");
                 }
-                MessageBox.Show($"합산단위 {count}개가 생성되었습니다.\n{folderDlg.SelectedPath}",
-                    "완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                var result = MessageBox.Show(
+                    $"합산단위 {count}개가 생성되었습니다.\n\n폴더를 여시겠습니까?",
+                    "완료", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+                if (result == DialogResult.Yes)
+                    System.Diagnostics.Process.Start("explorer.exe", folderDlg.SelectedPath);
             }
             catch (Exception ex) { ShowError($"파일 생성 오류:\n{ex.Message}"); }
         }
 
         private void BtnCreateCe_Click(object sender, EventArgs e)
         {
-            if (!File.Exists(TemplatePath))
-            { ShowError($"템플릿 파일을 찾을 수 없습니다.\n{TemplatePath}"); return; }
+            if (!File.Exists(EntityTemplatePath))
+            { ShowError($"템플릿 파일을 찾을 수 없습니다.\n{EntityTemplatePath}"); return; }
 
-            // 저장 폴더 선택
+            // 합산단위 폴더 선택
             using var folderDlg = new FolderBrowserDialog
             {
-                Description         = "구성기업 파일을 저장할 폴더를 선택하세요.",
+                Description            = "구성기업을 생성할 합산단위 폴더를 선택하세요.",
                 UseDescriptionForTitle = true,
             };
             if (folderDlg.ShowDialog() != DialogResult.OK) return;
@@ -266,10 +302,14 @@ namespace GlobeMapper
                 for (int i = 1; i <= count; i++)
                 {
                     var dest = Path.Combine(folderDlg.SelectedPath, $"구성기업_{i}.xlsx");
-                    File.Copy(TemplatePath, dest, overwrite: true);
+                    File.Copy(EntityTemplatePath, dest, overwrite: true);
+                    WriteFileType(dest, "entity");
                 }
-                MessageBox.Show($"구성기업 {count}개가 생성되었습니다.\n{folderDlg.SelectedPath}",
-                    "완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                var result = MessageBox.Show(
+                    $"구성기업 {count}개가 생성되었습니다.\n\n폴더를 여시겠습니까?",
+                    "완료", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+                if (result == DialogResult.Yes)
+                    System.Diagnostics.Process.Start("explorer.exe", folderDlg.SelectedPath);
             }
             catch (Exception ex) { ShowError($"파일 생성 오류:\n{ex.Message}"); }
         }
