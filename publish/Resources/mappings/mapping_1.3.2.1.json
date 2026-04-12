@@ -1,0 +1,51 @@
+{
+  "description": "구성기업 및 공동기업그룹 기업 정보",
+  "sheetName": "그룹구조",
+  "repeatable": true,
+  "collectionTarget": "CE",
+  "sections": {
+    "변동사항": {
+      "description": "변동 여부",
+      "mappings": [
+        { "cell": "O4",  "target": "Ce.ChangeFlag",                    "type": "bool",                           "label": "1. 직전 사업연도 대비 변동 여부" }
+      ]
+    },
+    "소재지국": {
+      "description": "소재지국 및 적용규칙",
+      "mappings": [
+        { "cell": "O5",  "target": "Ce.Id.ResCountryCode",             "type": "enum:CountryCodeType",           "label": "2. 소재지국" },
+        { "cell": "O6",  "target": "Ce.Id.Rules",                      "type": "enum:IdTypeRulesEnumType",       "label": "3. 적용가능규칙", "multi": true }
+      ]
+    },
+    "구성기업정보": {
+      "description": "구성기업 기본 정보",
+      "mappings": [
+        { "cell": "O7",  "target": "Ce.Id.Name",                       "type": "string",                         "label": "4. 구성기업 상호" },
+        { "cell": "O8",  "target": "Ce.Id.Tin.Value",                  "type": "string",                         "label": "5. 납세자번호" },
+        { "cell": "O9",  "target": "Ce.Id.ReceivingTin",               "type": "string",                         "label": "6. 신고접수국가 납세자번호" },
+        { "cell": "O10", "target": "Ce.Id.GlobeStatus",                "type": "enum:IdTypeGloBeStatusEnumType",  "label": "7. 기업유형", "multi": true }
+      ]
+    },
+    "소유지분": {
+      "description": "소유지분 구조 — 별첨 시트에서 읽음 (B=유형, C=납세자번호, D=소유지분%)",
+      "source": "별첨",
+      "mappings": []
+    },
+    "QIIR": {
+      "description": "적격소득산입규칙 적용 여부",
+      "mappings": [
+        { "cell": "O15", "target": "Ce.Qiir.PopeIpe",                  "type": "enum:PopeipeEnumType",           "label": "11. 모기업 유형" },
+        { "cell": "O16", "target": "Ce.Qiir.Exception.Tin.Value",      "type": "string",                         "label": "12. QIIR 모기업 납세자번호" },
+        { "cell": "O17", "target": "Ce.Qiir.MopeIpe.Tin.Value",        "type": "string",                         "label": "13. 부분소유모기업 납세자번호" }
+      ]
+    },
+    "QUTPR": {
+      "description": "적격소득산입보완규칙 적용 여부",
+      "mappings": [
+        { "cell": "O18", "target": "Ce.Qutpr.Art93",                   "type": "bool",                           "label": "14. 해외진출 초기 특례 적용 여부" },
+        { "cell": "O19", "target": "Ce.Qutpr.AggOwnership",            "type": "decimal",                        "label": "15. 소유지분 합계(%)" },
+        { "cell": "O20", "target": "Ce.Qutpr.UpeOwnership",            "type": "bool",                           "label": "16. UPE 소유지분이 합계보다 큰지 여부" }
+      ]
+    }
+  }
+}

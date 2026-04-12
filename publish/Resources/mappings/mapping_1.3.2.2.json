@@ -1,0 +1,16 @@
+{
+  "description": "제외기업 정보",
+  "sheetName": "제외기업",
+  "repeatable": true,
+  "collectionTarget": "ExcludedEntity",
+  "sections": {
+    "제외기업": {
+      "description": "제외기업 기본 정보",
+      "mappings": [
+        { "cell": "O3", "target": "ExcludedEntity.Change",  "type": "bool",                        "label": "1. 변동 여부" },
+        { "cell": "O4", "target": "ExcludedEntity.Name",    "type": "string",                      "label": "2. 제외기업 상호" },
+        { "cell": "O5", "target": "ExcludedEntity.Type",    "type": "enum:ExcludedEntityEnumType",  "label": "3. 제외기업 유형" }
+      ]
+    }
+  }
+}
