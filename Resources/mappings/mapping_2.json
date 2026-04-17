@@ -63,12 +63,13 @@
       ]
     },
     "2.3": {
-      "description": "해외진출 초기 특례",
+      "description": "해외진출 초기 특례 (첫 블록 기준 행 번호)",
       "mappings": [
-        { "cell": "M44", "target": "Summary.InitialIntActivity.StartDate",     "type": "date",   "label": "1. 최초적용연도 개시일" },
-        { "cell": "M45", "target": "Summary.InitialIntActivity.ReferenceJur",  "type": "enum:CountryCodeType", "label": "2. 준거국가" },
-        { "cell": "M46", "target": "Summary.InitialIntActivity.TangibleAsset", "type": "string", "label": "3. 준거국가 유형자산" },
-        { "cell": "M47", "target": "Summary.InitialIntActivity.NumCountries",  "type": "string", "label": "4. 구성기업 소재 국가 수" }
+        { "cell": "M42", "target": "Summary.InitialIntActivity.StartDate",     "type": "date",   "label": "1. 최초적용연도 개시일" },
+        { "cell": "M43", "target": "Summary.InitialIntActivity.ReferenceJur",  "type": "enum:CountryCodeType", "label": "2. 준거국가" },
+        { "cell": "M44", "target": "Summary.InitialIntActivity.TangibleAsset", "type": "string", "label": "3. 준거국가 유형자산" },
+        { "cell": "M45", "target": "Summary.InitialIntActivity.NumCountries",  "type": "string", "label": "4. 구성기업 소재 국가 수" },
+        { "cell": "M46", "target": "Summary.InitialIntActivity.OtherJurisdiction", "type": "string", "label": "5. 준거국가 외 유형자산(통합 셀: 국가코드(ISO2),유형자산값; 국가,값). 예: 'KR,100000000; US,50000000'" }
       ]
     }
   }

@@ -27,9 +27,10 @@
       ]
     },
     "소유지분": {
-      "description": "소유지분 구조 — 별첨 시트에서 읽음 (B=유형, C=납세자번호, D=소유지분%)",
-      "source": "별첨",
-      "mappings": []
+      "description": "소유지분 구조 — O11 통합 셀(병합 O11:R14)에서 읽음. 주주별 ';'로 구분, 필드는 '유형,TIN,TIN유형,발급국가,지분' 5개 콤마 구분. 예: 'GIR801, 1234567890, GIR3001, KR, 1; GIR802, 987, GIR3001, KR, 0.5'",
+      "mappings": [
+        { "cell": "O11", "target": "Ce.Ownership", "type": "string", "label": "8-10. 소유지분(유형,TIN,TIN유형,발급국가,지분; 주주별 ';' 구분)" }
+      ]
     },
     "QIIR": {
       "description": "적격소득산입규칙 적용 여부",

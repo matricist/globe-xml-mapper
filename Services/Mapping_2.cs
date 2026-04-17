@@ -17,7 +17,8 @@ namespace GlobeMapper.Services
     ///   2.2.1.3: O(b2+1)=수익, O(b2+2)=세전손익, O(b2+3)=간이세액, O(b2+6)=CIT율
     ///   2.2.2: B(b2+9)=GIR2901체크, B(b2+10)=GIR2902체크
     ///          E/I/L/O(b2+12~b2+15)=FinancialData(신고/직전/직전전/평균)
-    ///   2.3  : M(b2+18)=개시일, M(b2+19)=준거국가, M(b2+20)=유형자산, M(b2+21)=국가수
+    ///   2.3  : M(b2+17)=개시일, M(b2+18)=준거국가, M(b2+19)=유형자산,
+    ///          M(b2+20)=국가수, M(b2+21)=준거국가 외 유형자산(통합 셀 — 국가,값; 국가,값)
     /// </summary>
     public class Mapping_2 : MappingBase
     {
@@ -27,9 +28,6 @@ namespace GlobeMapper.Services
         private const int SET_SIZE = 52;     // 21+2+29
         private const int SET_GAP = 2;       // 세트 간 간격
 
-        private const string ATTACH_SHEET = "적용면제 첨부";
-        private const int ATTACH_HEADER_ROWS = 1; // 헤더 행(소재지국/유형자산) 1개
-
         public Mapping_2() : base("mapping_2.json") { }
 
         public override void Map(IXLWorksheet ws, Globe.GlobeOecd globe, List<string> errors, string fileName)
@@ -38,18 +36,15 @@ namespace GlobeMapper.Services
             if (ws.Workbook.TryGetWorksheet(ExcelController.MetaSheetName, out var metaWs))
                 blockCount = ExcelController.ReadBlockCount(metaWs, ws.Name);
 
-            // "적용면제 첨부" 시트 참조 (있으면)
-            ws.Workbook.TryGetWorksheet(ATTACH_SHEET, out var attachWs);
-
             for (int idx = 0; idx < blockCount; idx++)
             {
                 var b1 = BLOCK1_START + idx * (SET_SIZE + SET_GAP);
                 var b2 = b1 + BLOCK1_SIZE + GAP;
-                MapOneCountry(ws, attachWs, globe, errors, fileName, b1, b2, idx + 1);
+                MapOneCountry(ws, globe, errors, fileName, b1, b2, idx + 1);
             }
         }
 
-        private void MapOneCountry(IXLWorksheet ws, IXLWorksheet attachWs,
+        private void MapOneCountry(IXLWorksheet ws,
             Globe.GlobeOecd globe, List<string> errors, string fileName,
             int b1, int b2, int blockNum)
         {
@@ -144,12 +139,14 @@ namespace GlobeMapper.Services
             var faAcPl  = ws.Cell(b2 + 15, 12).GetString()?.Trim();  // L40
             var faGbPl  = ws.Cell(b2 + 15, 15).GetString()?.Trim();  // O40
 
-            // ─── 2.3 해외진출 초기 특례 (b2+18 ~ b2+21) ──────────────────
-            // R43=b2+18: 개시일, R44=b2+19: 준거국가, R45=b2+20: 유형자산, R46=b2+21: 국가수
-            var initStartRaw = ws.Cell(b2 + 18, 13).GetString()?.Trim(); // M43
-            var initRefJur   = ws.Cell(b2 + 19, 13).GetString()?.Trim(); // M44
-            var initRefAsset = ws.Cell(b2 + 20, 13).GetString()?.Trim(); // M45
-            var initNumJur   = ws.Cell(b2 + 21, 13).GetString()?.Trim(); // M46
+            // ─── 2.3 해외진출 초기 특례 (b2+17 ~ b2+21) ──────────────────
+            // M42=b2+17: 1.개시일, M43=b2+18: 2.준거국가, M44=b2+19: 3.유형자산,
+            // M45=b2+20: 4.국가수, M46=b2+21: 5.준거국가 외 유형자산(통합 셀)
+            var initStartRaw     = ws.Cell(b2 + 17, 13).GetString()?.Trim(); // M42
+            var initRefJur       = ws.Cell(b2 + 18, 13).GetString()?.Trim(); // M43
+            var initRefAsset     = ws.Cell(b2 + 19, 13).GetString()?.Trim(); // M44
+            var initNumJur       = ws.Cell(b2 + 20, 13).GetString()?.Trim(); // M45
+            var initOtherJurRaw  = ws.Cell(b2 + 21, 13).GetString()?.Trim(); // M46 (통합 셀)
 
             // ─── ETR / InitialIntActivity 데이터 유무 판단 ────────────────
             bool hasDemini  = deminiBasis.HasValue || !string.IsNullOrEmpty(f1GbRev) || !string.IsNullOrEmpty(f1AcRev)
@@ -303,11 +300,48 @@ namespace GlobeMapper.Services
                 if (!string.IsNullOrEmpty(initNumJur))
                     init.RfyNumberOfJurisdictions = initNumJur;
 
-                // 적용면제 첨부 시트에서 OtherJurisdiction 읽기 (flat 구조: 헤더 1행 + 데이터)
-                if (attachWs != null)
-                    ReadOtherJurisdictions(attachWs, blockNum, init, errors, fileName, loc);
+                // ─── item 5: 준거국가 외 국가 유형자산 (통합 셀 M46) ────────
+                // 포맷: "국가코드(ISO2),유형자산값" × N, 국가 간 ';' 구분
+                // 예: "KR, 100000000; US, 50000000"
+                if (!string.IsNullOrEmpty(initOtherJurRaw))
+                    ParseOtherJurisdictionsCell(initOtherJurRaw, init, b2 + 21, errors, fileName, loc);
 
                 js.GLoBeTax.InitialIntActivity = init;
+            }
+        }
+
+        /// <summary>
+        /// 준거국가 외 국가 유형자산 통합 셀 파싱.
+        /// "국가,값; 국가,값" → OtherJurisdiction[]
+        /// </summary>
+        private void ParseOtherJurisdictionsCell(
+            string cellValue, Globe.InitialIntActivityType init, int row,
+            List<string> errors, string fileName, string loc)
+        {
+            var entries = cellValue.Split(
+                ';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+            for (int i = 0; i < entries.Length; i++)
+            {
+                var parts = entries[i].Split(',', StringSplitOptions.TrimEntries);
+                if (parts.Length == 0 || string.IsNullOrEmpty(parts[0]))
+                    continue;
+
+                var countryRaw = parts[0];
+                var assetValue = parts.Length >= 2 ? parts[1] : "";
+
+                if (!TryParseEnum<Globe.CountryCodeType>(countryRaw, out var otherCode))
+                {
+                    errors.Add($"[{fileName}] [{loc}/2.3/외국{i + 1}] 국가코드 파싱 실패: '{countryRaw}' (M{row})");
+                    continue;
+                }
+
+                var other = new Globe.InitialIntActivityTypeOtherJurisdiction
+                {
+                    TangibleAssetValue = assetValue
+                };
+                other.ResCountryCode.Add(otherCode);
+                init.OtherJurisdiction.Add(other);
             }
         }
 
@@ -389,52 +423,6 @@ namespace GlobeMapper.Services
             }
 
             return jwr;
-        }
-
-        /// <summary>
-        /// "적용면제 첨부" 시트에서 OtherJurisdiction 데이터 읽기.
-        /// 현재 구조: 헤더 1행(소재지국 / 유형자산) + 데이터 행.
-        /// 블록번호에 해당하는 섹션(첨부N) 탐색 → 없으면 전체 flat 읽기.
-        /// </summary>
-        private void ReadOtherJurisdictions(IXLWorksheet attachWs, int blockNum,
-            Globe.InitialIntActivityType init, List<string> errors, string fileName, string loc)
-        {
-            var lastRow = attachWs.LastRowUsed()?.RowNumber() ?? 1;
-
-            // 첨부N 섹션 존재 여부 확인
-            int sectionStart = -1;
-            var target = $"첨부{blockNum}";
-            for (int r = 1; r <= lastRow; r++)
-            {
-                if (attachWs.Cell(r, 2).GetString()?.Trim() == target)
-                {
-                    sectionStart = r + ATTACH_HEADER_ROWS; // 헤더 행 이후부터 데이터
-                    break;
-                }
-            }
-
-            // 첨부N 섹션이 없으면 스킵 (flat 구조에서는 각 블록이 따로 기록하지 않음)
-            if (sectionStart < 0) return;
-
-            for (int r = sectionStart; r <= lastRow; r++)
-            {
-                var col2 = attachWs.Cell(r, 2).GetString()?.Trim();
-                if (col2?.StartsWith("첨부") == true) break; // 다음 섹션
-                var assetRaw = attachWs.Cell(r, 3).GetString()?.Trim();
-                if (string.IsNullOrEmpty(col2) && string.IsNullOrEmpty(assetRaw)) break;
-
-                if (TryParseEnum<Globe.CountryCodeType>(col2 ?? "", out var otherCode))
-                {
-                    var other = new Globe.InitialIntActivityTypeOtherJurisdiction
-                    {
-                        TangibleAssetValue = assetRaw ?? ""
-                    };
-                    other.ResCountryCode.Add(otherCode);
-                    init.OtherJurisdiction.Add(other);
-                }
-                else if (!string.IsNullOrEmpty(col2))
-                    errors.Add($"[{fileName}] [{loc}/2.3/첨부{blockNum}] 국가코드 파싱 실패: '{col2}'");
-            }
         }
 
         private static bool RowContains(IXLWorksheet ws, int row, string text)

@@ -107,6 +107,10 @@ namespace GlobeMapper.Services
         public Mapping_JurCal()
             : base(null) { }
 
+        // 현재 처리 중인 블록 범위 (FindRow 스코프)
+        private int _blockStart = 1;
+        private int _blockEnd = -1;
+
         public override void Map(
             IXLWorksheet ws,
             Globe.GlobeOecd globe,
@@ -114,14 +118,47 @@ namespace GlobeMapper.Services
             string fileName
         )
         {
-            MapJurisdiction(ws, globe, errors, fileName);
+            // 세로 스택된 "3.1 국가별" 블록을 모두 찾아 각각 처리
+            var blockStarts = FindAllBlockStarts(ws);
+            if (blockStarts.Count == 0) return;
+
+            var lastUsedRow = ws.LastRowUsed()?.RowNumber() ?? 300;
+            for (int i = 0; i < blockStarts.Count; i++)
+            {
+                _blockStart = blockStarts[i];
+                _blockEnd = (i + 1 < blockStarts.Count) ? blockStarts[i + 1] - 1 : lastUsedRow;
+                MapJurisdiction(ws, globe, errors, fileName);
+            }
+
+            // 블록 컨텍스트 리셋
+            _blockStart = 1;
+            _blockEnd = -1;
         }
 
-        // B열에서 contains 텍스트를 포함하는 첫 번째 행 반환 (-1 = 없음)
-        private static int FindRow(IXLWorksheet ws, string contains, int fromRow = 1)
+        /// <summary>
+        /// 전체 시트에서 "3.1 국가별 글로벌" 헤더 행 모두 찾기 (각각 블록 시작점).
+        /// 주의: "3.1 국가별"만으로 matching하면 "3.2.3.1 국가별 선택..."도 잡혀 블록이 과분할됨.
+        /// </summary>
+        private static List<int> FindAllBlockStarts(IXLWorksheet ws)
         {
+            var result = new List<int>();
             var lastRow = ws.LastRowUsed()?.RowNumber() ?? 300;
-            for (int r = fromRow; r <= lastRow; r++)
+            for (int r = 1; r <= lastRow; r++)
+            {
+                var txt = ws.Cell(r, 2).GetString()?.Trim() ?? "";
+                if (txt.Contains("3.1 국가별 글로벌"))
+                    result.Add(r);
+            }
+            return result;
+        }
+
+        // B열에서 contains 텍스트를 포함하는 행 반환 (-1 = 없음).
+        // fromRow/toRow 생략 시 현재 블록 범위(_blockStart, _blockEnd) 사용.
+        private int FindRow(IXLWorksheet ws, string contains, int fromRow = 0, int toRow = 0)
+        {
+            if (fromRow <= 0) fromRow = _blockStart;
+            int end = toRow > 0 ? toRow : (_blockEnd > 0 ? _blockEnd : ws.LastRowUsed()?.RowNumber() ?? 300);
+            for (int r = fromRow; r <= end; r++)
             {
                 var txt = ws.Cell(r, 2).GetString()?.Trim() ?? "";
                 if (txt.Contains(contains))
@@ -211,169 +248,11 @@ namespace GlobeMapper.Services
             Map323Election(ws, etr, errors, fileName);
             Map323DeemedDistTax(ws, etr, errors, fileName);
 
-            // 형제 시트 "적격국제해운부수소득" (있으면 처리)
-            if (ws.Workbook.TryGetWorksheet("적격국제해운부수소득", out var shippingWs))
-                MapShippingIncome(shippingWs, etr, errors, fileName);
+            // 3.2.4.4 국제해운소득·결손 제외 — 국가별 계산 시트 내부에 통합됨
+            MapShippingIncome(ws, etr, errors, fileName);
 
-            // 형제 시트 "추가세액 계산" (있으면 처리)
-            if (ws.Workbook.TryGetWorksheet("추가세액 계산", out var addTaxWs))
-                Map33TopUpTaxCalc(addTaxWs, etr, errors, fileName);
-
-            // 3.1.4~3.1.18: JurWithTaxingRights (과세권이 있는 국가)
-            Map31JurWithTaxingRights(ws, js, errors, fileName);
-        }
-
-        // ─── 3.1.4~3.1.18 JurWithTaxingRights ───────────────────────────
-        private static void Map31JurWithTaxingRights(
-            IXLWorksheet mainWs,
-            Globe.GlobeBodyTypeJurisdictionSection js,
-            List<string> errors,
-            string fileName
-        )
-        {
-            // 첨부 시트 없으면 종료
-            if (!mainWs.Workbook.TryGetWorksheet("국가별 계산 첨부", out var attachWs))
-                return;
-
-            var lastRow = attachWs.LastRowUsed()?.RowNumber() ?? 2;
-            for (int r = 3; r <= lastRow; r++)
-            {
-                var jurRaw = attachWs.Cell(r, 2).GetString()?.Trim(); // B: 과세권이 있는 국가
-                if (string.IsNullOrEmpty(jurRaw))
-                    break;
-
-                if (!TryParseEnum<Globe.CountryCodeType>(jurRaw, out var jurCode))
-                {
-                    errors.Add($"[{fileName}] [3.1 첨부 R{r}] 국가코드 '{jurRaw}' 파싱 실패");
-                    continue;
-                }
-
-                var entry = new Globe.JurisdictionSectionTypeJurWithTaxingRights
-                {
-                    JurisdictionName = jurCode,
-                };
-
-                var rd = new Globe.JurisdictionSectionTypeJurWithTaxingRightsReportDifference();
-                bool hasRd = false;
-
-                // C(3): ETRDifference (decimal 0~1)
-                var etrRaw = attachWs.Cell(r, 3).GetString()?.Trim();
-                if (
-                    !string.IsNullOrEmpty(etrRaw)
-                    && decimal.TryParse(
-                        etrRaw,
-                        System.Globalization.NumberStyles.Any,
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        out var etrVal
-                    )
-                )
-                {
-                    rd.EtrDifference = etrVal;
-                    rd.EtrDifferenceSpecified = true;
-                    hasRd = true;
-                }
-
-                // D(4): 조정대상조세 합계 → 모양만, XML 매핑 없음 (skip)
-
-                // E(5): NetGLoBeDifference
-                var netRaw = attachWs.Cell(r, 5).GetString()?.Trim();
-                if (!string.IsNullOrEmpty(netRaw))
-                {
-                    rd.NetGLoBeDifference = netRaw;
-                    hasRd = true;
-                }
-
-                // F(6): SBIEDifference
-                var sbieRaw = attachWs.Cell(r, 6).GetString()?.Trim();
-                if (!string.IsNullOrEmpty(sbieRaw))
-                {
-                    rd.SbieDifference = sbieRaw;
-                    hasRd = true;
-                }
-
-                // G(7): AddCurrentTuTDifference
-                var addTutRaw = attachWs.Cell(r, 7).GetString()?.Trim();
-                if (!string.IsNullOrEmpty(addTutRaw))
-                {
-                    rd.AddCurrentTuTDifference = addTutRaw;
-                    hasRd = true;
-                }
-
-                // H(8): TuTDifference
-                var tutRaw = attachWs.Cell(r, 8).GetString()?.Trim();
-                if (!string.IsNullOrEmpty(tutRaw))
-                {
-                    rd.TuTDifference = tutRaw;
-                    hasRd = true;
-                }
-
-                // I(9)~L(12): AdjCoveredTaxDifference
-                var aggRaw = attachWs.Cell(r, 9).GetString()?.Trim();
-                var qrtcExpRaw = attachWs.Cell(r, 10).GetString()?.Trim();
-                var otherRaw = attachWs.Cell(r, 11).GetString()?.Trim();
-                var deferRaw = attachWs.Cell(r, 12).GetString()?.Trim();
-                if (
-                    !string.IsNullOrEmpty(aggRaw)
-                    || !string.IsNullOrEmpty(qrtcExpRaw)
-                    || !string.IsNullOrEmpty(otherRaw)
-                    || !string.IsNullOrEmpty(deferRaw)
-                )
-                {
-                    var adj =
-                        new Globe.JurisdictionSectionTypeJurWithTaxingRightsReportDifferenceAdjCoveredTaxDifference();
-                    if (!string.IsNullOrEmpty(aggRaw))
-                        adj.AggCurrentTaxExpense = aggRaw;
-                    if (!string.IsNullOrEmpty(qrtcExpRaw))
-                        adj.QrtcExpense = qrtcExpRaw;
-                    if (!string.IsNullOrEmpty(otherRaw))
-                        adj.OtherTaxCredits = otherRaw;
-                    if (!string.IsNullOrEmpty(deferRaw))
-                        adj.DeferTaxExpense = deferRaw;
-                    rd.AdjCoveredTaxDifference = adj;
-                    hasRd = true;
-                }
-
-                // M(13): QRTCIncome
-                var qrtcIncRaw = attachWs.Cell(r, 13).GetString()?.Trim();
-                if (!string.IsNullOrEmpty(qrtcIncRaw))
-                {
-                    rd.QrtcIncome = qrtcIncRaw;
-                    hasRd = true;
-                }
-
-                // N(14): ExcessNegTaxCarryForw
-                var excessRaw = attachWs.Cell(r, 14).GetString()?.Trim();
-                if (!string.IsNullOrEmpty(excessRaw))
-                {
-                    rd.ExcessNegTaxCarryForw = excessRaw;
-                    hasRd = true;
-                }
-
-                // O(15): TransitionDifference (여/부)
-                var transRaw = attachWs.Cell(r, 15).GetString()?.Trim();
-                if (!string.IsNullOrEmpty(transRaw))
-                {
-                    rd.TransitionDifference = ParseBool(transRaw);
-                    rd.TransitionDifferenceSpecified = true;
-                    hasRd = true;
-                }
-
-                // P(16): ElectionsDifference;KElectionsDifference (세미콜론 구분)
-                var electionsRaw = attachWs.Cell(r, 16).GetString()?.Trim();
-                if (!string.IsNullOrEmpty(electionsRaw))
-                {
-                    var parts = electionsRaw.Split(';', 2, StringSplitOptions.TrimEntries);
-                    if (parts.Length >= 1 && !string.IsNullOrEmpty(parts[0]))
-                    { rd.ElectionsDifference = parts[0]; hasRd = true; }
-                    if (parts.Length >= 2 && !string.IsNullOrEmpty(parts[1]))
-                    { rd.KElectionsDifference = parts[1]; hasRd = true; }
-                }
-
-                if (hasRd)
-                    entry.ReportDifference = rd;
-
-                js.JurWithTaxingRights.Add(entry);
-            }
+            // 3.3 추가세액 계산 — 국가별 계산 시트 내부에 통합됨
+            Map33TopUpTaxCalc(ws, etr, errors, fileName);
         }
 
         // ─── 3.2.1 OverallComputation ────────────────────────────────────
@@ -494,11 +373,10 @@ namespace GlobeMapper.Services
                     overall.AdjustedCoveredTax.Total = adjTaxRaw;
 
                 // (c) 통합형피지배외국법인: rowCfc+2~, B비면 종료
+                // 실제 CfcJur 추가 시점에 TransBlendCfc 생성 (빈 태그 방지)
                 var rowCfc = FindRow(ws, "(c) 통합형피지배외국법인");
                 if (rowCfc >= 0)
                 {
-                    overall.AdjustedCoveredTax.TransBlendCfc ??=
-                        new Globe.EtrComputationTypeOverallComputationAdjustedCoveredTaxTransBlendCfc();
                     for (int row = rowCfc + 2; ; row++)
                     {
                         var cfcJurRaw = ws.Cell(row, 2).GetString()?.Trim();
@@ -515,6 +393,9 @@ namespace GlobeMapper.Services
                         var amtRaw = ws.Cell(row, 10).GetString()?.Trim();
                         if (string.IsNullOrEmpty(tinRaw) && string.IsNullOrEmpty(amtRaw))
                             continue;
+
+                        overall.AdjustedCoveredTax.TransBlendCfc ??=
+                            new Globe.EtrComputationTypeOverallComputationAdjustedCoveredTaxTransBlendCfc();
 
                         overall.AdjustedCoveredTax.TransBlendCfc.CfcJur.Add(
                             new Globe.EtrComputationTypeOverallComputationAdjustedCoveredTaxTransBlendCfcCfcJur
@@ -1081,8 +962,10 @@ namespace GlobeMapper.Services
             string fileName
         )
         {
-            if (FindRow(ws, "3.2.3") < 0)
-                return;
+            // 3.2.3.1 섹션 헤더 이후부터 검색 (블록 앞쪽 조정사항과 키워드 충돌 방지)
+            int rSec = FindRow(ws, "3.2.3.1");
+            if (rSec < 0) rSec = FindRow(ws, "3.2.3");
+            if (rSec < 0) return;
 
             // 헬퍼: B열에서 헤더 찾고 M열 값 반환
             DateTime? ParseYear(string raw, string label)
@@ -1097,23 +980,23 @@ namespace GlobeMapper.Services
                 return null;
             }
 
-            // ── 1. 매년 선택 (M열 여/부 bool) ──────────────────────────────
-            int rA = FindRow(ws, "총자산처분이익");
-            int rB = FindRow(ws, "경미한 감액");
-            int rC = FindRow(ws, "실질기반제외소득 미적용");
-            int rD = FindRow(ws, "이월조정대상조세 처리");
+            // ── 1. 매년 선택 (M열 여/부 bool) — 3.2.3.1 섹션 내부에서 찾기 ──
+            int rA = FindRow(ws, "총자산처분이익", rSec);
+            int rB = FindRow(ws, "경미한 감액", rSec);
+            int rC = FindRow(ws, "실질기반제외소득 미적용", rSec);
+            int rD = FindRow(ws, "이월조정대상조세 처리", rSec);
 
             bool hasAnnual = rA >= 0 || rB >= 0 || rC >= 0 || rD >= 0;
 
             // ── 2. 5년 선택 (M=선택사업연도 col13, P=취소사업연도 col16) ───
-            int rE = FindRow(ws, "지분투자손익포함");
-            int rF = FindRow(ws, "주식기준보상비용");
-            int rG = FindRow(ws, "실현주의 적용");
-            int rH = FindRow(ws, "구성기업 간 연결회계조정");
-            int rI = FindRow(ws, "이연법인세비용 미배분");
+            int rE = FindRow(ws, "지분투자손익포함", rSec);
+            int rF = FindRow(ws, "주식기준보상비용", rSec);
+            int rG = FindRow(ws, "실현주의 적용", rSec);
+            int rH = FindRow(ws, "구성기업 간 연결회계조정", rSec);
+            int rI = FindRow(ws, "이연법인세비용 미배분", rSec);
 
             // ── 5. 그 밖의 선택 (M=선택사업연도 col13, P=취소사업연도 col16) ─
-            int rJ = FindRow(ws, "결손취급특례");
+            int rJ = FindRow(ws, "결손취급특례", rSec);
 
             bool hasAny =
                 hasAnnual || rE >= 0 || rF >= 0 || rG >= 0 || rH >= 0 || rI >= 0 || rJ >= 0;
@@ -1287,6 +1170,24 @@ namespace GlobeMapper.Services
                         RevocationYearSpecified = hasRev,
                     };
             }
+
+            // 후처리: Election이 실제로 아무 필드도 채워지지 않았으면 null
+            // (헤더만 있고 실제 입력값 0개여도 위에서 etr.Election 객체는 생성됨)
+            if (etr.Election is { } e0)
+            {
+                bool elHasAny = e0.Art326Specified
+                    || e0.Art415Specified
+                    || e0.Art461Specified
+                    || e0.Art531Specified
+                    || e0.SimplifiedReportingSpecified
+                    || e0.Art322 != null
+                    || e0.Art325 != null
+                    || e0.Art328 != null
+                    || e0.NoDefTaxAllocation != null
+                    || e0.Art45 != null
+                    || e0.Art321C != null;
+                if (!elHasAny) etr.Election = null;
+            }
         }
 
         // ─── 3.2.3.2.1 간주분배세액 → AdjustedCoveredTax.DeemedDistTax ─────
@@ -1447,7 +1348,8 @@ namespace GlobeMapper.Services
             }
         }
 
-        // ─── 추가세액 계산 시트 → OverallComputation 나머지 필드 ─────────────
+        // ─── 3.3 추가세액 계산 → OverallComputation 나머지 필드 ─────────────
+        // 국가별 계산 시트 내부의 "3.3 추가세액 계산" 섹션에서 읽음.
         private void Map33TopUpTaxCalc(
             IXLWorksheet ws,
             Globe.EtrType etr,
@@ -1569,17 +1471,19 @@ namespace GlobeMapper.Services
             // ── 3.3.2.2 PE 배분 ──────────────────────────────────────────────
             // 헤더(+0) → 컬럼헤더(+1) → 데이터행(+2~, B비면 종료)
             // B(2)=인건비Total, D(4)=유형자산Total, H(8)=고정사업장소재지국, K(11)=인건비Alloc, N(14)=유형자산Alloc
+            // 실제 데이터 첫 행이 있을 때만 SubstanceExclusion 생성 (빈 객체 방지)
             var row3322 = FindRow(ws, "3.3.2.2");
             if (row3322 >= 0)
             {
-                overall.SubstanceExclusion ??=
-                    new Globe.EtrComputationTypeOverallComputationSubstanceExclusion();
                 var lastRow = ws.LastRowUsed()?.RowNumber() ?? 300;
                 for (int r = row3322 + 2; r <= lastRow; r++)
                 {
                     var payRaw = ws.Cell(r, 2).GetString()?.Trim(); // B
                     if (string.IsNullOrEmpty(payRaw))
                         break;
+
+                    overall.SubstanceExclusion ??=
+                        new Globe.EtrComputationTypeOverallComputationSubstanceExclusion();
                     var tanRaw = ws.Cell(r, 4).GetString()?.Trim(); // D
                     var jurRaw = ws.Cell(r, 8).GetString()?.Trim(); // H
                     var paAlRaw = ws.Cell(r, 11).GetString()?.Trim(); // K
@@ -1622,11 +1526,10 @@ namespace GlobeMapper.Services
 
             // ── 3.3.2.3 FTE 배분 ─────────────────────────────────────────────
             // 동일 구조: B=인건비Total, D=유형자산Total, H=주주구성기업소재지국, K=인건비Alloc, N=유형자산Alloc
+            // 실제 데이터 첫 행이 있을 때만 SubstanceExclusion 생성 (빈 객체 방지)
             var row3323 = FindRow(ws, "3.3.2.3");
             if (row3323 >= 0)
             {
-                overall.SubstanceExclusion ??=
-                    new Globe.EtrComputationTypeOverallComputationSubstanceExclusion();
                 var lastRow = ws.LastRowUsed()?.RowNumber() ?? 300;
                 for (int r = row3323 + 2; r <= lastRow; r++)
                 {
@@ -1637,6 +1540,9 @@ namespace GlobeMapper.Services
                     var jurRaw = ws.Cell(r, 8).GetString()?.Trim(); // H
                     var paAlRaw = ws.Cell(r, 11).GetString()?.Trim(); // K
                     var taAlRaw = ws.Cell(r, 14).GetString()?.Trim(); // N
+
+                    overall.SubstanceExclusion ??=
+                        new Globe.EtrComputationTypeOverallComputationSubstanceExclusion();
 
                     var jur =
                         new Globe.EtrComputationTypeOverallComputationSubstanceExclusionFteAllocationJurOfOwners();
@@ -1926,7 +1832,8 @@ namespace GlobeMapper.Services
             }
         }
 
-        // ─── 적격국제해운부수소득 시트 → NetGlobeIncome.IntShippingIncome ──────
+        // ─── 3.2.4.4 국제해운소득·결손 제외 → NetGlobeIncome.IntShippingIncome ──────
+        // 국가별 계산 시트 내부의 "(b) 적격국제해운부수소득" 섹션에서 읽음.
         private void MapShippingIncome(
             IXLWorksheet ws,
             Globe.EtrType etr,

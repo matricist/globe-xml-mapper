@@ -2,7 +2,6 @@ using System;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
-using ClosedXML.Excel;
 using GlobeMapper.Services;
 
 namespace GlobeMapper
@@ -14,49 +13,18 @@ namespace GlobeMapper
 
         private static readonly string TemplatePath = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, "Resources", "main_template.xlsx");
-        private static readonly string GroupTemplatePath = Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory, "Resources", "group_template.xlsx");
-        private static readonly string EntityTemplatePath = Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory, "Resources", "entity_template.xlsx");
-
-        // _META 시트에 fileType 기록 (ClosedXML로 파일만 수정, Excel 열지 않음)
-        private static void WriteFileType(string xlsxPath, string fileType)
-        {
-            using var wb = new XLWorkbook(xlsxPath);
-            IXLWorksheet meta;
-            if (!wb.TryGetWorksheet(ExcelController.MetaSheetName, out meta))
-            {
-                meta = wb.AddWorksheet(ExcelController.MetaSheetName);
-                meta.Cell(1, 1).Value = "key";
-                meta.Cell(1, 2).Value = "value";
-            }
-            // 기존 fileType 항목 갱신 또는 추가
-            int row = 2;
-            while (true)
-            {
-                var k = meta.Cell(row, 1).GetString()?.Trim();
-                if (string.IsNullOrEmpty(k)) break;
-                if (k == "fileType") { meta.Cell(row, 2).Value = fileType; wb.Save(); return; }
-                row++;
-            }
-            meta.Cell(row, 1).Value = "fileType";
-            meta.Cell(row, 2).Value = fileType;
-            meta.Visibility = XLWorksheetVisibility.VeryHidden;
-            wb.Save();
-        }
 
         // ── 색상 상수 ──────────────────────────────────────────────────────
-        private static readonly Color BG        = Color.FromArgb(30, 30, 32);
-        private static readonly Color BG2       = Color.FromArgb(36, 36, 40);
-        private static readonly Color BG3       = Color.FromArgb(44, 44, 50);
-        private static readonly Color BORDER    = Color.FromArgb(55, 55, 62);
-        private static readonly Color FG        = Color.FromArgb(215, 215, 220);
-        private static readonly Color FG_DIM    = Color.FromArgb(120, 120, 130);
-        private static readonly Color FG_ACCENT = Color.FromArgb(86, 186, 240);
-        private static readonly Color ACCENT    = Color.FromArgb(210, 160, 0);
-        private static readonly Color PRIMARY   = Color.FromArgb(200, 90, 15);
-        private static readonly Color GRAY      = Color.FromArgb(78, 78, 88);
-        private static readonly Color GREEN     = Color.FromArgb(40, 160, 80);
+        private static readonly Color BG          = Color.FromArgb(28, 28, 30);
+        private static readonly Color BG_CARD     = Color.FromArgb(44, 44, 48);
+        private static readonly Color BG_HOVER    = Color.FromArgb(54, 54, 60);
+        private static readonly Color FG          = Color.FromArgb(230, 230, 235);
+        private static readonly Color FG_SUB      = Color.FromArgb(150, 150, 158);
+        private static readonly Color FG_DIM      = Color.FromArgb(100, 100, 108);
+        private static readonly Color ACCENT      = Color.FromArgb(200, 90, 15);   // XML 변환: 강조
+        private static readonly Color ACCENT_HOV  = Color.FromArgb(218, 105, 25);
+        private static readonly Color NUM_DIM     = Color.FromArgb(180, 180, 185);
+        private static readonly Color NUM_ACCENT  = Color.FromArgb(255, 180, 120);
 
         public MainForm()
         {
@@ -70,106 +38,194 @@ namespace GlobeMapper
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox     = false;
             StartPosition   = FormStartPosition.CenterScreen;
-            ClientSize      = new Size(480, 420);
+            ClientSize      = new Size(640, 540);
             BackColor       = BG;
             ForeColor       = FG;
-            Font            = new Font("Segoe UI", 11f);
+            Font            = new Font("Segoe UI", 10f);
 
             var iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "app.ico");
             if (File.Exists(iconPath)) Icon = new Icon(iconPath);
 
-            // ── 타이틀 ────────────────────────────────────────────────────
+            // ── 타이틀 (컴팩트) ──────────────────────────────────────────
+            // 타이틀은 영문이라 Segoe UI 유지
             var title = new Label
             {
                 Text      = "GIR 2 XML Mapper",
-                Dock      = DockStyle.Top, Height = 64,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Font      = new Font("Segoe UI Semibold", 17f),
-                ForeColor = Color.FromArgb(230, 230, 235),
-                BackColor = Color.FromArgb(22, 22, 24),
+                Dock      = DockStyle.Top, Height = 44,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Font      = new Font("Segoe UI Semibold", 13f),
+                ForeColor = FG,
+                Padding   = new Padding(22, 0, 0, 0),
             };
-            var titleDiv = Divider(DockStyle.Top);
 
-            // ── 버전 ──────────────────────────────────────────────────────
+            // ── 버전 (하단, 플랫) ────────────────────────────────────────
             var ver = new Label
             {
-                Text      = "v1   만료일 2026.6.30   라이선스 DA",
-                Dock      = DockStyle.Bottom, Height = 28,
+                Text      = "v1  ·  만료일 2026.6.30  ·  라이선스 DA",
+                Dock      = DockStyle.Bottom, Height = 30,
                 TextAlign = ContentAlignment.MiddleCenter,
-                Font      = new Font("Segoe UI", 9f),
-                ForeColor = Color.FromArgb(70, 70, 80),
-                BackColor = Color.FromArgb(22, 22, 24),
+                Font      = new Font("Segoe UI", 8.5f),
+                ForeColor = FG_DIM,
             };
 
-            // ── 하단 버튼 영역 ─────────────────────────────────────────────
-            var bottomDiv = Divider(DockStyle.Bottom);
-            var bottom = new Panel
-            {
-                Dock      = DockStyle.Bottom, Height = 136,
-                BackColor = Color.FromArgb(24, 24, 26),
-                Padding   = new Padding(28, 14, 28, 14),
-            };
-
-            var btnXml = MakeBtn("XML 변환하기", BtnConvert_Click, accent: true);
-            btnXml.Dock   = DockStyle.Bottom;
-            btnXml.Height = 48;
-            btnXml.Margin = new Padding(0, 8, 0, 0);
-
-            var btnPanel = MakeBtn("MNE 서식 작업", BtnSwitchToPanel_Click, primary: true);
-            btnPanel.Dock   = DockStyle.Top;
-            btnPanel.Height = 48;
-
-            bottom.Controls.Add(btnXml);
-            bottom.Controls.Add(btnPanel);
-
-            // ── 중앙 콘텐츠 영역 ──────────────────────────────────────────
+            // ── 중앙 스텝 영역 ───────────────────────────────────────────
             var content = new Panel
             {
                 Dock       = DockStyle.Fill,
                 BackColor  = Color.Transparent,
-                Padding    = new Padding(28, 20, 28, 8),
+                Padding    = new Padding(22, 6, 22, 10),
             };
 
-            // 섹션 라벨
-            var lblSection = new Label
-            {
-                Text      = "템플릿 다운로드",
-                Height    = 28,
-                ForeColor = FG_ACCENT,
-                Font      = new Font("Segoe UI", 10f, FontStyle.Bold),
-                TextAlign = ContentAlignment.MiddleLeft,
-            };
+            var card1 = MakeStepCard(1, "템플릿 다운로드", "빈 서식 파일 내려받기",              false, BtnCreateMne_Click);
+            var card2 = MakeStepCard(2, "서식 작업",       "열린 Excel에 연결해 데이터 작성",    false, BtnSwitchToPanel_Click);
+            var card3 = MakeStepCard(3, "XML 변환",        "작성된 xlsx를 GIR XML로 변환",       true,  BtnConvert_Click);
 
-            // 3개 버튼 세로 배치 (회색 계열)
-            var btnMne   = MakeBtn("MNE",   BtnCreateMne_Click,  gray: true);
-            var btnGroup = MakeBtn("합산단위", BtnCreateGroup_Click, gray: true);
-            var btnCe    = MakeBtn("구성기업", BtnCreateCe_Click,   gray: true);
-            foreach (var b in new[] { btnMne, btnGroup, btnCe })
-                b.Font = new Font("Segoe UI", 11f);
-
-            // 절대 배치
-            content.Controls.Add(lblSection);
-            content.Controls.Add(btnMne);
-            content.Controls.Add(btnGroup);
-            content.Controls.Add(btnCe);
+            content.Controls.Add(card1);
+            content.Controls.Add(card2);
+            content.Controls.Add(card3);
 
             content.Resize += (s, e) =>
             {
                 var x  = content.Padding.Left;
-                var y0 = content.Padding.Top;
                 var w  = content.ClientSize.Width - content.Padding.Left - content.Padding.Right;
-                lblSection.SetBounds(x, y0,       w, 28);
-                btnMne.SetBounds(    x, y0 + 36,  w, 40);
-                btnGroup.SetBounds(  x, y0 + 82,  w, 40);
-                btnCe.SetBounds(     x, y0 + 128, w, 40);
+                const int cardH = 90;
+                const int gap   = 14;
+                var totalH = cardH * 3 + gap * 2;
+                var y0     = content.Padding.Top + Math.Max(0, (content.ClientSize.Height - content.Padding.Top - content.Padding.Bottom - totalH) / 2);
+                card1.SetBounds(x, y0,                     w, cardH);
+                card2.SetBounds(x, y0 + cardH + gap,       w, cardH);
+                card3.SetBounds(x, y0 + (cardH + gap) * 2, w, cardH);
             };
 
             Controls.Add(content);
-            Controls.Add(bottom);
-            Controls.Add(bottomDiv);
-            Controls.Add(titleDiv);
-            Controls.Add(title);
             Controls.Add(ver);
+            Controls.Add(title);
+        }
+
+        /// <summary>
+        /// 스텝 카드: [번호] [제목 / 설명] 레이아웃. 카드 전체가 클릭 영역.
+        /// accent=true면 강조색(③ XML 변환용).
+        /// </summary>
+        private Control MakeStepCard(int stepNumber, string title, string desc, bool accent, EventHandler click)
+        {
+            var baseBg   = accent ? ACCENT     : BG_CARD;
+            var hoverBg  = accent ? ACCENT_HOV : BG_HOVER;
+            var titleFg  = accent ? Color.White : FG;
+            var descFg   = accent ? Color.FromArgb(255, 230, 210) : FG_SUB;
+            var numFg    = accent ? NUM_ACCENT : NUM_DIM;
+
+            // 레이아웃 상수
+            const int NUM_LEFT   = 8;
+            const int NUM_W      = 48;
+            const int TEXT_LEFT  = NUM_LEFT + NUM_W + 8; // 64
+            const int ARROW_W    = 36;
+
+            var card = new Panel
+            {
+                BackColor = baseBg,
+                Cursor    = Cursors.Hand,
+            };
+
+            // AutoEllipsis + GDI 렌더링 조합이 한글 Bold에서 일부 자소 획을 깎는 증상 회피:
+            //  - AutoEllipsis = false (잘림 기능 제거; 폭은 Reflow에서 충분히 확보)
+            //  - UseCompatibleTextRendering = true (GDI+ 사용, 한글 렌더링 더 안정)
+            //  - 초기 Width 100 대신 충분히 큰 값으로 시작
+            const int CARD_H = 90;
+
+            var lblNum = new Label
+            {
+                Text      = stepNumber.ToString(),
+                Font      = new Font("Segoe UI Light", 30f),
+                ForeColor = numFg,
+                BackColor = baseBg,
+                Bounds    = new Rectangle(NUM_LEFT, 0, NUM_W, CARD_H),
+                TextAlign = ContentAlignment.MiddleCenter,
+                UseCompatibleTextRendering = true,
+            };
+
+            var lblTitle = new Label
+            {
+                Text         = title,
+                Font         = new Font("Malgun Gothic", 13f, FontStyle.Bold),
+                ForeColor    = titleFg,
+                BackColor    = baseBg,
+                Bounds       = new Rectangle(TEXT_LEFT, 18, 400, 28),
+                TextAlign    = ContentAlignment.MiddleLeft,
+                AutoEllipsis = false,
+                UseCompatibleTextRendering = true,
+            };
+
+            var lblDesc = new Label
+            {
+                Text         = desc,
+                Font         = new Font("Malgun Gothic", 10f),
+                ForeColor    = descFg,
+                BackColor    = baseBg,
+                Bounds       = new Rectangle(TEXT_LEFT, 48, 400, 24),
+                TextAlign    = ContentAlignment.MiddleLeft,
+                AutoEllipsis = false,
+                UseCompatibleTextRendering = true,
+            };
+
+            var lblArrow = new Label
+            {
+                Text      = "›",
+                Font      = new Font("Segoe UI", 22f),
+                ForeColor = accent ? Color.White : FG_SUB,
+                BackColor = baseBg,
+                Bounds    = new Rectangle(0, 0, ARROW_W, CARD_H),
+                TextAlign = ContentAlignment.MiddleCenter,
+                UseCompatibleTextRendering = true,
+            };
+
+            card.Controls.Add(lblNum);
+            card.Controls.Add(lblTitle);
+            card.Controls.Add(lblDesc);
+            card.Controls.Add(lblArrow);
+
+            // 카드 리사이즈 시 제목/설명/화살표 위치 조정
+            void Reflow()
+            {
+                var w = card.ClientSize.Width;
+                int textW = Math.Max(10, w - TEXT_LEFT - ARROW_W - 6);
+                lblTitle.Width  = textW;
+                lblDesc.Width   = textW;
+                lblArrow.Left   = w - ARROW_W - 4;
+            }
+            card.Resize += (s, e) => Reflow();
+            card.HandleCreated += (s, e) => Reflow();
+
+            // 호버 효과 — 카드 및 자식 컨트롤에서 진입/이탈 감지
+            // 라벨 BackColor도 동기화 (Transparent 대신 고정색 쓰므로)
+            void SetHover(bool on)
+            {
+                var bg = on ? hoverBg : baseBg;
+                card.BackColor    = bg;
+                lblNum.BackColor  = bg;
+                lblTitle.BackColor = bg;
+                lblDesc.BackColor  = bg;
+                lblArrow.BackColor = bg;
+            }
+            card.MouseEnter += (s, e) => SetHover(true);
+            card.MouseLeave += (s, e) =>
+            {
+                if (!card.ClientRectangle.Contains(card.PointToClient(Cursor.Position)))
+                    SetHover(false);
+            };
+            foreach (Control c in new Control[] { lblNum, lblTitle, lblDesc, lblArrow })
+            {
+                c.MouseEnter += (s, e) => SetHover(true);
+                c.MouseLeave += (s, e) =>
+                {
+                    if (!card.ClientRectangle.Contains(card.PointToClient(Cursor.Position)))
+                        SetHover(false);
+                };
+                c.Cursor = Cursors.Hand;
+                c.Click += click;
+            }
+            card.Click += click;
+
+            return card;
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -233,149 +289,27 @@ namespace GlobeMapper
             catch (Exception ex) { ShowError($"파일 생성 오류:\n{ex.Message}"); }
         }
 
-        private void BtnCreateGroup_Click(object sender, EventArgs e)
-        {
-            if (!File.Exists(GroupTemplatePath))
-            { ShowError($"템플릿 파일을 찾을 수 없습니다.\n{GroupTemplatePath}"); return; }
-
-            // 저장 폴더 선택
-            using var folderDlg = new FolderBrowserDialog
-            {
-                Description         = "합산단위 파일을 저장할 폴더를 선택하세요.",
-                UseDescriptionForTitle = true,
-            };
-            if (folderDlg.ShowDialog() != DialogResult.OK) return;
-
-            // 개수 입력
-            int count = AskCount("합산단위를 몇 개 생성할까요?");
-            if (count <= 0) return;
-
-            try
-            {
-                for (int i = 1; i <= count; i++)
-                {
-                    var subDir = Path.Combine(folderDlg.SelectedPath, $"합산단위_{i}");
-                    Directory.CreateDirectory(subDir);
-                    var dest = Path.Combine(subDir, $"합산단위_{i}.xlsx");
-                    File.Copy(GroupTemplatePath, dest, overwrite: true);
-                    WriteFileType(dest, "group");
-                }
-
-                var result = MessageBox.Show(
-                    $"합산단위 {count}개가 생성되었습니다.\n\n폴더를 여시겠습니까?",
-                    "완료", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
-                if (result == DialogResult.Yes)
-                    System.Diagnostics.Process.Start("explorer.exe", folderDlg.SelectedPath);
-            }
-            catch (Exception ex) { ShowError($"파일 생성 오류:\n{ex.Message}"); }
-        }
-
-        private void BtnCreateCe_Click(object sender, EventArgs e)
-        {
-            if (!File.Exists(EntityTemplatePath))
-            { ShowError($"템플릿 파일을 찾을 수 없습니다.\n{EntityTemplatePath}"); return; }
-
-            // 합산단위 폴더 선택
-            using var folderDlg = new FolderBrowserDialog
-            {
-                Description            = "구성기업을 생성할 합산단위 폴더를 선택하세요.",
-                UseDescriptionForTitle = true,
-            };
-            if (folderDlg.ShowDialog() != DialogResult.OK) return;
-
-            // 개수 입력
-            int count = AskCount("구성기업을 몇 개 생성할까요?");
-            if (count <= 0) return;
-
-            try
-            {
-                for (int i = 1; i <= count; i++)
-                {
-                    var dest = Path.Combine(folderDlg.SelectedPath, $"구성기업_{i}.xlsx");
-                    File.Copy(EntityTemplatePath, dest, overwrite: true);
-                    WriteFileType(dest, "entity");
-                }
-                var result = MessageBox.Show(
-                    $"구성기업 {count}개가 생성되었습니다.\n\n폴더를 여시겠습니까?",
-                    "완료", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
-                if (result == DialogResult.Yes)
-                    System.Diagnostics.Process.Start("explorer.exe", folderDlg.SelectedPath);
-            }
-            catch (Exception ex) { ShowError($"파일 생성 오류:\n{ex.Message}"); }
-        }
-
-        // 개수 입력 미니 다이얼로그 (0 이하 반환 = 취소)
-        private static int AskCount(string prompt)
-        {
-            var dlg = new Form
-            {
-                Text            = "개수 입력",
-                FormBorderStyle = FormBorderStyle.FixedDialog,
-                StartPosition   = FormStartPosition.CenterParent,
-                ClientSize      = new Size(300, 110),
-                MaximizeBox     = false, MinimizeBox = false,
-                BackColor       = Color.FromArgb(36, 36, 40),
-                ForeColor       = Color.FromArgb(215, 215, 220),
-            };
-
-            var lbl = new Label
-            {
-                Text     = prompt,
-                AutoSize = false,
-                ForeColor = Color.FromArgb(215, 215, 220),
-                Font     = new Font("Segoe UI", 10f),
-            };
-            lbl.SetBounds(16, 14, 268, 22);
-
-            var txt = new TextBox
-            {
-                Font      = new Font("Segoe UI", 11f),
-                BackColor = Color.FromArgb(44, 44, 50),
-                ForeColor = Color.FromArgb(215, 215, 220),
-                BorderStyle = BorderStyle.FixedSingle,
-                Text      = "1",
-            };
-            txt.SetBounds(16, 42, 268, 28);
-
-            var btnOk = new Button
-            {
-                Text      = "확인",
-                DialogResult = DialogResult.OK,
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(200, 90, 15),
-                ForeColor = Color.White,
-                Font      = new Font("Segoe UI", 10f),
-            };
-            btnOk.FlatAppearance.BorderSize = 0;
-            btnOk.SetBounds(148, 76, 136, 26);
-
-            dlg.Controls.AddRange(new Control[] { lbl, txt, btnOk });
-            dlg.AcceptButton = btnOk;
-
-            if (dlg.ShowDialog() != DialogResult.OK) return 0;
-            return int.TryParse(txt.Text.Trim(), out int n) && n > 0 ? n : 0;
-        }
 
         private void BtnConvert_Click(object sender, EventArgs e)
         {
             using var terms = new TermsDialog();
             if (terms.ShowDialog(this) != DialogResult.OK) return;
 
-            // 폴더 선택
-            using var folderDlg = new FolderBrowserDialog
+            // main 파일 선택 (단일 파일)
+            using var openDlg = new OpenFileDialog
             {
-                Description            = "변환할 서식 파일이 있는 폴더를 선택하세요.",
-                UseDescriptionForTitle = true,
+                Filter = "Excel 파일 (*.xlsx)|*.xlsx",
+                Title  = "변환할 main_template.xlsx 파일을 선택하세요.",
             };
-            if (folderDlg.ShowDialog() != DialogResult.OK) return;
-            var rootPath = folderDlg.SelectedPath;
+            if (openDlg.ShowDialog() != DialogResult.OK) return;
+            var mainFilePath = openDlg.FileName;
 
             using var saveDlg = new SaveFileDialog
             {
                 Filter           = "XML 파일 (*.xml)|*.xml",
                 Title            = "XML 파일 저장",
                 FileName         = "GLOBE_OECD.xml",
-                InitialDirectory = rootPath,
+                InitialDirectory = Path.GetDirectoryName(mainFilePath),
             };
             if (saveDlg.ShowDialog() != DialogResult.OK) return;
 
@@ -389,7 +323,7 @@ namespace GlobeMapper
                 };
 
                 var orchestrator  = new MappingOrchestrator();
-                var mappingErrors = orchestrator.MapFolder(rootPath, globe);
+                var mappingErrors = orchestrator.MapWorkbook(mainFilePath, globe);
 
                 var xml = XmlExportService.Serialize(globe);
                 File.WriteAllText(saveDlg.FileName, xml, System.Text.Encoding.UTF8);
@@ -442,40 +376,6 @@ namespace GlobeMapper
             _excel?.Dispose();
             _controlPanel?.Close();
             base.OnFormClosing(e);
-        }
-
-        // ─────────────────────────────────────────────────────────────────────
-        //  UI 헬퍼
-        // ─────────────────────────────────────────────────────────────────────
-
-        private static Panel Divider(DockStyle dock) => new Panel
-        {
-            Height    = 1,
-            BackColor = Color.FromArgb(55, 55, 62),
-            Dock      = dock,
-        };
-
-        private static Button MakeBtn(string text, EventHandler click,
-            bool accent = false, bool primary = false, bool gray = false)
-        {
-            var bg    = accent ? ACCENT : primary ? PRIMARY : gray ? GRAY : BG3;
-            var hover = accent  ? Color.FromArgb(225, 175, 10)
-                      : primary ? Color.FromArgb(218, 105, 25)
-                      : gray    ? Color.FromArgb(98, 98, 108)
-                      : Color.FromArgb(54, 54, 60);
-            var btn = new Button
-            {
-                Text      = text,
-                FlatStyle = FlatStyle.Flat,
-                BackColor = bg,
-                ForeColor = (accent || primary || gray) ? Color.White : FG,
-                Font      = new Font("Segoe UI", 12f),
-                Cursor    = Cursors.Hand,
-            };
-            btn.FlatAppearance.BorderSize = 0;
-            btn.FlatAppearance.MouseOverBackColor = hover;
-            btn.Click += click;
-            return btn;
         }
 
         private static void ShowError(string msg) =>

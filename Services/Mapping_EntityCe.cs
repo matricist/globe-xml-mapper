@@ -12,56 +12,104 @@ namespace GlobeMapper.Services
     {
         public Mapping_EntityCe() : base(null) { }
 
+        // 현재 처리 중인 블록 범위 (FindRow 스코프)
+        private int _blockStart = 1;
+        private int _blockEnd = -1;
+
         public override void Map(
             IXLWorksheet ws,
             Globe.GlobeOecd globe,
             List<string> errors,
             string fileName
-        ) => MapWithJur(ws, globe, errors, fileName, null);
-
-        /// <summary>
-        /// jurCode가 있으면 해당 JurisdictionSection에 CEComputation 추가.
-        /// null이면 CE TIN issuedBy로 폴백.
-        /// </summary>
-        public void MapWithJur(
-            IXLWorksheet ws,
-            Globe.GlobeOecd globe,
-            List<string> errors,
-            string fileName,
-            Globe.CountryCodeType? jurCode,
-            string subGroupTin = null
         )
         {
-            // ── CE TIN 식별 (3.2.4.1(a) 첫 번째 납세자번호 항목) ─────────
+            // 기업매핑 로드 (main_template.xlsx의 "기업매핑" 시트)
+            var groupMap = EntityGroupMap.Load(ws.Workbook, errors);
+
+            // 세로 스택된 entity 블록 모두 찾기
+            var blockStarts = FindAllEntityBlockStarts(ws);
+            if (blockStarts.Count == 0) return;
+
+            var lastUsedRow = ws.LastRowUsed()?.RowNumber() ?? 300;
+            for (int i = 0; i < blockStarts.Count; i++)
+            {
+                _blockStart = blockStarts[i];
+                _blockEnd = (i + 1 < blockStarts.Count) ? blockStarts[i + 1] - 1 : lastUsedRow;
+                MapOneEntity(ws, globe, groupMap, errors, fileName);
+            }
+
+            _blockStart = 1;
+            _blockEnd = -1;
+        }
+
+        /// <summary>
+        /// 전체 시트에서 entity 블록 시작 행 모두 찾기.
+        /// 마커: "3.2.4 구성기업" — 각 entity 블록 최상위 헤더.
+        /// 기존 "1. 구성기업 또는 공동기업그룹 기업의 납세자번호"는 한 블록 내에서
+        /// 3.2.4.1(a) / 3.2.4.2(a) / 3.2.4.2(c) 섹션마다 중복 등장해 블록이 과분할되는 문제가 있었음.
+        /// </summary>
+        private static List<int> FindAllEntityBlockStarts(IXLWorksheet ws)
+        {
+            var result = new List<int>();
+            var lastRow = ws.LastRowUsed()?.RowNumber() ?? 300;
+            for (int r = 1; r <= lastRow; r++)
+            {
+                var v = ws.Cell(r, 2).GetString() ?? "";
+                if (v.Contains("3.2.4 구성기업"))
+                    result.Add(r);
+            }
+            return result;
+        }
+
+        private void MapOneEntity(
+            IXLWorksheet ws,
+            Globe.GlobeOecd globe,
+            EntityGroupMap groupMap,
+            List<string> errors,
+            string fileName
+        )
+        {
+            // ── CE TIN 식별 (3.2.4.1(a) 납세자번호 M열) ─────────
             var rTin = FindRow(ws, "1. 구성기업 또는 공동기업그룹 기업의 납세자번호");
             if (rTin < 0)
             {
-                errors.Add($"[{fileName}] CE TIN 항목 없음 — '구성기업 계산' 시트에서 납세자번호 행을 찾을 수 없음");
+                errors.Add($"[{fileName}] [블록 {_blockStart}~{_blockEnd}] CE TIN 항목 없음");
                 return;
             }
 
             var ceTinRaw = ws.Cell(rTin, 13).GetString()?.Trim(); // M열
             if (string.IsNullOrEmpty(ceTinRaw))
             {
-                errors.Add($"[{fileName}] CE TIN 미입력 — '구성기업 계산' 3.2.4.1(a) 납세자번호 M열에 '값,GIR3001,KR' 형식으로 입력 필요");
+                errors.Add($"[{fileName}] [블록 R{_blockStart}] CE TIN 미입력 (M{rTin})");
                 return;
             }
 
             var ceTin = ParseTin(ceTinRaw);
 
-            // ── JurisdictionSection 조회: 폴더 기준 국가코드 우선, 없으면 CE TIN issuedBy 폴백 ──
+            // ── 기업매핑에서 (국가, 하위그룹 TIN) 조회 ─────────
             Globe.CountryCodeType lookupCode;
-            if (jurCode.HasValue)
+            string subGroupTin = null;
+            if (groupMap.TryGet(ceTin.Value, out var mapEntry))
             {
-                lookupCode = jurCode.Value;
+                if (mapEntry.Country.HasValue)
+                {
+                    lookupCode = mapEntry.Country.Value;
+                    subGroupTin = mapEntry.SubGroupTin;
+                }
+                else
+                {
+                    errors.Add($"[{fileName}] [블록 R{_blockStart}] 기업매핑에 TIN '{ceTin.Value}' 있으나 국가 미지정");
+                    return;
+                }
             }
             else if (ceTin.IssuedBySpecified)
             {
+                // 기업매핑에 없으면 TIN의 발급국가로 폴백
                 lookupCode = ceTin.IssuedBy;
             }
             else
             {
-                errors.Add($"[{fileName}] CE TIN '{ceTinRaw}' 형식 오류 — '납세자번호값,GIR3001,KR' 처럼 발급국가(ISO 2자리)까지 입력 필요");
+                errors.Add($"[{fileName}] [블록 R{_blockStart}] CE TIN '{ceTin.Value}' 이 기업매핑에 없음 + 발급국가도 없음");
                 return;
             }
 
@@ -69,7 +117,7 @@ namespace GlobeMapper.Services
                 .FirstOrDefault(s => s.Jurisdiction == lookupCode);
             if (js == null)
             {
-                errors.Add($"[{fileName}] JurisdictionSection({lookupCode}) 없음 — 합산단위 파일과 같은 폴더에 위치하는지 확인");
+                errors.Add($"[{fileName}] [블록 R{_blockStart}] JurisdictionSection({lookupCode}) 없음 — '국가별 계산' 시트에 해당 합산단위 블록 필요");
                 return;
             }
 
@@ -137,16 +185,16 @@ namespace GlobeMapper.Services
             // ── 3.2.4.6 그 밖의 회계기준 ─────────────────────────────────────
             Map3246(ws, ceComp, errors, fileName);
 
-            // ── 3.4.1/3.4.2 "추가세액" 별도 시트 ────────────────────────────
-            if (ws.Workbook.TryGetWorksheet("추가세액", out var topUpWs))
-            {
-                Map341(topUpWs, js, errors, fileName);
-                Map342(topUpWs, js, errors, fileName);
-            }
+            // ── 3.4.1/3.4.2 추가세액 — 구성기업 계산 시트 내부에 통합됨 ──────
+            Map341(ws, js, errors, fileName);
+            Map342(ws, js, errors, fileName);
+
+            // 후처리: 빈 하위 객체 정리 (데이터 없이 생성된 Elections 등)
+            CleanupEmptyCeComp(ceComp);
         }
 
         // ─── 3.2.4(a): row에서 K열 여/부 → Elections.SimplCalculations ──
-        private static void Map324a(
+        private void Map324a(
             IXLWorksheet ws,
             Globe.EtrComputationTypeCeComputation ceComp,
             List<string> errors,
@@ -166,7 +214,7 @@ namespace GlobeMapper.Services
         // ─── 3.2.4(b): 헤더 다음 행들에서 B=GroupTIN, K=EntityTINs ──────
         // 헤더행: B="1. 연결납세그룹(납세자번호)", K="2. 해당 연결납세그룹에 포함된 기업..."
         // 데이터행: B=GroupTIN ("값,유형,발급국가"), K=EntityTIN (행마다 1개)
-        private static void Map324b(
+        private void Map324b(
             IXLWorksheet ws,
             Globe.EtrComputationTypeCeComputation ceComp,
             List<string> errors,
@@ -223,7 +271,7 @@ namespace GlobeMapper.Services
             Globe.CurrentAdjustedTaxEnumType.Gir2417,
         };
 
-        private static void Map3242a(
+        private void Map3242a(
             IXLWorksheet ws,
             Globe.EtrComputationTypeCeComputation ceComp,
             List<string> errors,
@@ -247,15 +295,17 @@ namespace GlobeMapper.Services
 
             // 3. 조정사항 (a)~(q) 17개 → AdjustedCoveredTax.Adjustments (GIR2401~2417)
             // O(15)=가산액, Q(17)=차감액
+            // 실제 값이 하나라도 있을 때만 AdjustedCoveredTax 생성 (빈 태그 방지)
             var rAdjHdr = FindRow(ws, "3. 조정사항", rSec);
             if (rAdjHdr >= 0)
             {
-                ceComp.AdjustedCoveredTax ??= new Globe.EtrComputationTypeCeComputationAdjustedCoveredTax();
                 for (int i = 0; i < TaxAdjustmentItems.Length; i++)
                 {
                     var adds = ws.Cell(rAdjHdr + 1 + i, 15).GetString()?.Trim(); // O: 가산액
                     var reds = ws.Cell(rAdjHdr + 1 + i, 17).GetString()?.Trim(); // Q: 차감액
                     if (string.IsNullOrEmpty(adds) && string.IsNullOrEmpty(reds)) continue;
+
+                    ceComp.AdjustedCoveredTax ??= new Globe.EtrComputationTypeCeComputationAdjustedCoveredTax();
 
                     var adj = new Globe.EtrComputationTypeCeComputationAdjustedCoveredTaxAdjustments
                     {
@@ -284,7 +334,7 @@ namespace GlobeMapper.Services
         // 헤더행: "대상조세 국가간 배분", 컬럼헤더 +1행, 데이터 +2행~ (행추가 가능)
         // C(3)=배분전(IncomeTax, 첫 행만), E(5)=Basis, G(7)=OtherTIN, J(10)=ResCountry
         // L(12)=Additions, N(14)=Reductions
-        private static void Map3242b(
+        private void Map3242b(
             IXLWorksheet ws,
             Globe.EtrComputationTypeCeComputation ceComp,
             List<string> errors,
@@ -363,7 +413,7 @@ namespace GlobeMapper.Services
             Globe.DeferredAdjustedTaxEnumType.Gir2515, Globe.DeferredAdjustedTaxEnumType.Gir2516,
         };
 
-        private static void Map3242c(
+        private void Map3242c(
             IXLWorksheet ws,
             Globe.EtrComputationTypeCeComputation ceComp,
             List<string> errors,
@@ -485,7 +535,7 @@ namespace GlobeMapper.Services
             Globe.AdjustmentItemEnumType.Gir2025, Globe.AdjustmentItemEnumType.Gir2026,
         };
 
-        private static void Map3241a(
+        private void Map3241a(
             IXLWorksheet ws,
             Globe.EtrComputationTypeCeComputation ceComp,
             List<string> errors,
@@ -506,15 +556,17 @@ namespace GlobeMapper.Services
 
             // (a)~(z) 26개 조정항목 (rows 18~43) → NetGlobeIncome.Adjustments[]
             // 헤더행 "3. 조정사항" 바로 다음 행부터 26행이 고정 구조
+            // 실제 값이 하나라도 있을 때만 NetGlobeIncome 객체 생성 (빈 태그 방지)
             var rAdjHdr = FindRow(ws, "3. 조정사항");
             if (rAdjHdr >= 0)
             {
-                ceComp.NetGlobeIncome ??= new Globe.EtrComputationTypeCeComputationNetGlobeIncome();
                 for (int i = 0; i < AdjustmentItems.Length; i++)
                 {
                     var adds = ws.Cell(rAdjHdr + 1 + i, 13).GetString()?.Trim(); // M: 가산액
                     var reds = ws.Cell(rAdjHdr + 1 + i, 16).GetString()?.Trim(); // P: 차감액
                     if (string.IsNullOrEmpty(adds) && string.IsNullOrEmpty(reds)) continue;
+
+                    ceComp.NetGlobeIncome ??= new Globe.EtrComputationTypeCeComputationNetGlobeIncome();
 
                     var adj = new Globe.EtrComputationTypeCeComputationNetGlobeIncomeAdjustments
                     {
@@ -544,7 +596,7 @@ namespace GlobeMapper.Services
         // E(5)=Basis(GIR1701~1704), G(7)=OtherTIN, J(10)=ResCountry, L(12)=Additions, N(14)=Reductions
         // 첫 데이터행 C(3)="2. 조정 전 회계상 순손익" 값 → AdjustedFanil.Fanil
         // (b) 섹션 없거나 C(3) 비어있으면 M16 "배분 후 회계상 순손익" 으로 폴백
-        private static void Map3241b(
+        private void Map3241b(
             IXLWorksheet ws,
             Globe.EtrComputationTypeCeComputation ceComp,
             List<string> errors,
@@ -614,7 +666,7 @@ namespace GlobeMapper.Services
         // ─── 3.2.4.1(c): 국가간 손익 조정 → CrossBorderAdjustments ─────
         // 헤더행: "(c) 국가간 손익 조정", 컬럼헤더 +1행, 데이터 +2행~
         // C(3)=Basis, F(6)=OtherTIN, I(9)=ResCountryCode, L(12)=Additions, P(16)=Reductions
-        private static void Map3241c(
+        private void Map3241c(
             IXLWorksheet ws,
             Globe.EtrComputationTypeCeComputation ceComp,
             List<string> errors,
@@ -667,7 +719,7 @@ namespace GlobeMapper.Services
         // ─── 3.2.4.1(d): 최종모기업 글로벌최저한세소득 감액 → UpeAdjustments ──
         // 헤더행: "최종모기업의 글로벌최저한세소득 감액", 컬럼헤더 +1행, 데이터 +2행~ (행추가 가능)
         // E(5)=Basis, H(8)=소유지분보유자TIN, K(11)=직접보유비율(%), N(14)=소득차감액
-        private static void Map3241d(
+        private void Map3241d(
             IXLWorksheet ws,
             Globe.EtrComputationTypeCeComputation ceComp,
             List<string> errors,
@@ -811,7 +863,7 @@ namespace GlobeMapper.Services
         // 5년선택 (d~i):   "3. 5년 선택" 행 기준 오프셋, O(15)=선택연도, Q(17)=취소연도
         // 기타선택 (j):    "6. 기타선택" 행 기준 오프셋, O(15)=선택연도, Q(17)=취소연도
         // 공정가액조정 (k): "k. 공정가액조정" 행 이후 데이터 행, E(5)=사업연도, J(10)=(i)/(ii)
-        private static void Map3243(
+        private void Map3243(
             IXLWorksheet ws,
             Globe.EtrComputationTypeCeComputation ceComp,
             List<string> errors,
@@ -940,7 +992,9 @@ namespace GlobeMapper.Services
 
             // ── k: 공정가액조정 선택 → Art634[] ───────────────────────────────
             // B열: "k. 공정가액조정", 이후 +2행부터 데이터 (헤더행 1개 건너뜀)
-            // E(5)=FYTriggerEvent(날짜), J(10)=(i)/(ii) → Inclusion.Art634CI/Art634CIi
+            // E(5)=FYTriggerEvent(날짜) [병합 E:H의 앵커]
+            // I(9)=(i)/(ii) [병합 I:R의 앵커 — 이전 J(10) 잘못 기재 수정]
+            // Inclusion이 실제 (i)/(ii) 파싱 성공한 경우만 Art634 엔트리 추가 (빈 Inclusion 방지)
             var rK = FindRow(ws, "k. 공정가액조정", rSec);
             if (rK >= 0)
             {
@@ -948,20 +1002,47 @@ namespace GlobeMapper.Services
                 for (int r = rK + 2; r <= System.Math.Min(rK + 10, lastRow); r++)
                 {
                     var eyRaw = ws.Cell(r, 5).GetString()?.Trim();  // E: 사업연도
-                    var inclRaw = ws.Cell(r, 10).GetString()?.Trim(); // J: (i)/(ii)
+                    var inclRaw = ws.Cell(r, 9).GetString()?.Trim(); // I: (i)/(ii) 병합 앵커
                     if (string.IsNullOrEmpty(eyRaw) && string.IsNullOrEmpty(inclRaw)) break;
                     if (!TryParseDate(eyRaw, out var fy)) continue;
 
                     var incl = new Globe.EtrComputationTypeCeComputationElectionsArt634Inclusion();
-                    if (inclRaw == "(i)" || inclRaw == "i") { incl.Art634CI = true; incl.Art634CISpecified = true; }
-                    else if (inclRaw == "(ii)" || inclRaw == "ii") { incl.Art634CIi = true; incl.Art634CIiSpecified = true; }
+                    bool hasIncl = false;
+                    if (inclRaw == "(i)" || inclRaw == "i")
+                    { incl.Art634CI = true; incl.Art634CISpecified = true; hasIncl = true; }
+                    else if (inclRaw == "(ii)" || inclRaw == "ii")
+                    { incl.Art634CIi = true; incl.Art634CIiSpecified = true; hasIncl = true; }
 
                     el.Art634.Add(new Globe.EtrComputationTypeCeComputationElectionsArt634
                     {
                         FyTriggerEvent = fy,
-                        Inclusion = incl
+                        Inclusion = hasIncl ? incl : null
                     });
                 }
+            }
+        }
+
+        /// <summary>
+        /// MapOneEntity 끝에서 호출: ceComp의 하위 객체 중 실제로 데이터가 없는 것들을
+        /// null로 되돌려 빈 태그(&lt;Elections /&gt; 등)가 XML에 나오지 않도록 정리.
+        /// </summary>
+        private static void CleanupEmptyCeComp(Globe.EtrComputationTypeCeComputation ceComp)
+        {
+            if (ceComp.Elections is { } e0)
+            {
+                bool hasAny = e0.SimplCalculationsSpecified
+                    || e0.Art321Specified
+                    || e0.KArt447CSpecified
+                    || e0.Art153 != null
+                    || e0.Art321B != null
+                    || e0.Art321C != null
+                    || e0.Art634.Count > 0
+                    || e0.AggregatedReporting != null
+                    || e0.Art447 != null
+                    || e0.Art456 != null
+                    || e0.Art75.Count > 0
+                    || e0.Art76.Count > 0;
+                if (!hasAny) ceComp.Elections = null;
             }
         }
 
@@ -969,7 +1050,7 @@ namespace GlobeMapper.Services
         // rSec+3: 항목2 국제해운 Category(O=15, 쉼표구분), rSec+4: Revenue, rSec+5: Costs, rSec+6: Total
         // rSec+7: 항목6 부수소득 Category(O=15 단일), rSec+8: Revenue, rSec+9: Costs, rSec+10: Total
         // rSec+11: 인건비(PayrollCosts), rSec+12: 유형자산(TangibleAssets), rSec+13: CoveredTaxes
-        private static void Map3244(
+        private void Map3244(
             IXLWorksheet ws,
             Globe.EtrComputationTypeCeComputation ceComp,
             List<string> errors,
@@ -1063,7 +1144,7 @@ namespace GlobeMapper.Services
         // B(2)=주주구성기업TIN, E(5)=투자기업TIN, G(7)=ActualDeemedDist,
         // K(11)=LocalCreditableTaxGross, N(14)=ShareOfUndistNetGlobeInc
         // Status/ElectionYear/RevocationYear: 3.2.4.3 h행(r5Year+5)에서 읽음
-        private static void Map3245(
+        private void Map3245(
             IXLWorksheet ws,
             Globe.EtrComputationTypeCeComputation ceComp,
             List<string> errors,
@@ -1140,7 +1221,7 @@ namespace GlobeMapper.Services
         // 헤더: rSec+1(R163), 데이터 행: rSec+2 이후 (B가 빈 행까지)
         // B(2)=CE TIN, K(11)=OtherFas (적용 인정회계기준/공인회계기준)
         // ceComp.Tin.Value와 일치하는 행의 K값을 사용, 없으면 첫 번째 비어있지 않은 K값
-        private static void Map3246(
+        private void Map3246(
             IXLWorksheet ws,
             Globe.EtrComputationTypeCeComputation ceComp,
             List<string> errors,
@@ -1179,8 +1260,11 @@ namespace GlobeMapper.Services
         }
 
         // ─── 3.4.1: 소득산입규칙(IIR) 적용 → JurisdictionSection.LowTaxJurisdiction ──
-        // 1. a,b,c → 주 시트 O(15)열 / 2+3 모기업 테이블 → "추가세액 첨부" 시트 B~H
-        private static void Map341(
+        // 1. a,b,c → O(15)열 / 2+3 모기업 정보 → 통합 셀(O7, 2번 섹션 앵커)
+        // 통합 셀 포맷(모기업 1건, ',' 구분 9필드, 주주 구분 ';'):
+        //   TIN값, TIN유형(GIR300x), 발급국가(ISO2), 모기업소재지국(ISO2),
+        //   OtherOwnershipAllocation, InclusionRatio, TopUpTaxShare, IirOffSet, TopUpTax
+        private void Map341(
             IXLWorksheet ws,
             Globe.JurisdictionSectionType js,
             List<string> errors,
@@ -1191,7 +1275,6 @@ namespace GlobeMapper.Services
             if (rSec < 0) return;
 
             // 1. 추가세액 배분 그룹기업 (LTCE) a,b,c → O(15)열
-            // B열 "1. 추가세액 배분 그룹기업" 헤더 위치 = a 행 (merged cell 상단)
             var rLtce = FindRow(ws, "1. 추가세액 배분", rSec);
             if (rLtce < 0) return;
 
@@ -1200,20 +1283,6 @@ namespace GlobeMapper.Services
             var tutRaw = ws.Cell(rLtce + 2, 15).GetString()?.Trim(); // c: TopUpTax
             if (string.IsNullOrEmpty(tinRaw)) return;
 
-            // 첨부 시트 탐색: 3.4.1 구간의 O열에서 시트 참조 읽기
-            IXLWorksheet attachWs = null;
-            var rEnd = FindRow(ws, "3.4.2", rSec + 1);
-            if (rEnd < 0) rEnd = ws.LastRowUsed()?.RowNumber() ?? 500;
-            for (int r = rLtce; r <= rEnd; r++)
-            {
-                var oVal = ws.Cell(r, 15).GetString()?.Trim();
-                if (string.IsNullOrEmpty(oVal) || oVal == tinRaw || oVal == ngiRaw || oVal == tutRaw) continue;
-                if (ws.Workbook.TryGetWorksheet(oVal, out attachWs)) break;
-            }
-            if (attachWs == null) // 폴백: "첨부" 포함 시트 검색
-                attachWs = ws.Workbook.Worksheets
-                    .FirstOrDefault(s => s.Name != ws.Name && s.Name.Contains("첨부"));
-
             // IIR 엔트리 생성
             var iir = new Globe.LowTaxJurisdictionTypeLtceIir
             {
@@ -1221,51 +1290,15 @@ namespace GlobeMapper.Services
                 TopUpTax = string.IsNullOrEmpty(tutRaw) ? "0" : tutRaw
             };
 
-            // 모기업 테이블 (첨부 시트) → ParentEntity[]
-            if (attachWs != null)
+            // 2+3. 모기업 정보 통합 셀 → ParentEntity[]
+            // "2. 적격소득산입규칙을 적용해야 하는 모기업" 행 앵커 O열
+            var rParent = FindRow(ws, "2. 적격소득산입규칙", rSec);
+            if (rParent < 0) rParent = FindRow(ws, "적격소득산입규칙", rSec);
+            if (rParent > 0)
             {
-                var lastRow = attachWs.LastRowUsed()?.RowNumber() ?? 100;
-                // 헤더 행 건너뛰기: B열에 "모기업" 또는 "납세자번호" 포함 행 이후부터
-                int dataStart = 1;
-                for (int r = 1; r <= System.Math.Min(lastRow, 10); r++)
-                {
-                    var hdr = attachWs.Cell(r, 2).GetString();
-                    if (hdr != null && (hdr.Contains("모기업") || hdr.Contains("납세자번호")))
-                    { dataStart = r + 1; break; }
-                }
-                for (int r = dataStart; r <= lastRow; r++)
-                {
-                    var bRaw = attachWs.Cell(r, 2).GetString()?.Trim(); // B: 모기업 TIN
-                    var cRaw = attachWs.Cell(r, 3).GetString()?.Trim(); // C: 소재지국
-                    var dRaw = attachWs.Cell(r, 4).GetString()?.Trim(); // D: OtherOwnershipAllocation
-                    var eRaw = attachWs.Cell(r, 5).GetString()?.Trim(); // E: InclusionRatio
-                    var fRaw = attachWs.Cell(r, 6).GetString()?.Trim(); // F: TopUpTaxShare
-                    var gRaw = attachWs.Cell(r, 7).GetString()?.Trim(); // G: IirOffSet
-                    var hRaw = attachWs.Cell(r, 8).GetString()?.Trim(); // H: TopUpTax
-
-                    if (string.IsNullOrEmpty(bRaw) && string.IsNullOrEmpty(fRaw)) break;
-                    if (string.IsNullOrEmpty(bRaw)) continue;
-
-                    Globe.CountryCodeType cc = default;
-                    if (!string.IsNullOrEmpty(cRaw))
-                        System.Enum.TryParse(cRaw, true, out cc);
-
-                    decimal.TryParse(eRaw,
-                        System.Globalization.NumberStyles.Any,
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        out var inclusionRatio);
-
-                    iir.ParentEntity.Add(new Globe.LowTaxJurisdictionTypeLtceIirParentEntity
-                    {
-                        Tin                    = ParseTin(bRaw),
-                        ResCountryCode         = cc,
-                        OtherOwnershipAllocation = dRaw ?? "0",
-                        InclusionRatio         = inclusionRatio,
-                        TopUpTaxShare          = fRaw ?? "0",
-                        IirOffSet              = gRaw ?? "0",
-                        TopUpTax               = hRaw ?? "0"
-                    });
-                }
+                var parentRaw = ws.Cell(rParent, 15).GetString()?.Trim();
+                if (!string.IsNullOrEmpty(parentRaw))
+                    ParseParentEntities(parentRaw, iir, rParent, errors, fileName);
             }
 
             var ltce = new Globe.LowTaxJurisdictionTypeLtce { Tin = ParseTin(tinRaw) };
@@ -1275,9 +1308,93 @@ namespace GlobeMapper.Services
             js.LowTaxJurisdiction.Ltce.Add(ltce);
         }
 
+        /// <summary>
+        /// 3.4.1 모기업 통합 셀 파싱.
+        /// 필드 9개(',' 구분): TIN값, TIN유형, 발급국가, 소재지국,
+        ///   OtherOwnershipAllocation, InclusionRatio, TopUpTaxShare, IirOffSet, TopUpTax
+        /// 여러 모기업은 ';'로 구분.
+        /// </summary>
+        private static void ParseParentEntities(
+            string cellValue,
+            Globe.LowTaxJurisdictionTypeLtceIir iir,
+            int row,
+            List<string> errors,
+            string fileName
+        )
+        {
+            var shareholders = cellValue.Split(
+                ';', System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries);
+
+            for (int i = 0; i < shareholders.Length; i++)
+            {
+                var parts = shareholders[i].Split(',', System.StringSplitOptions.TrimEntries);
+                if (parts.Length == 0 || parts.All(string.IsNullOrEmpty)) continue;
+
+                var tinVal   = parts.Length >= 1 ? parts[0] : null;
+                var tinType  = parts.Length >= 2 ? parts[1] : null;
+                var issuedBy = parts.Length >= 3 ? parts[2] : null;
+                var resCc    = parts.Length >= 4 ? parts[3] : null;
+                var other    = parts.Length >= 5 ? parts[4] : null;
+                var incRatio = parts.Length >= 6 ? parts[5] : null;
+                var tutShare = parts.Length >= 7 ? parts[6] : null;
+                var iirOff   = parts.Length >= 8 ? parts[7] : null;
+                var topUpTax = parts.Length >= 9 ? parts[8] : null;
+
+                if (string.IsNullOrEmpty(tinVal)) continue;
+
+                // TIN 조립
+                Globe.TinType tin;
+                if (tinVal.Equals("NOTIN", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    tin = NoTin();
+                }
+                else
+                {
+                    tin = new Globe.TinType { Value = tinVal };
+                    if (!string.IsNullOrEmpty(tinType)
+                        && TryParseEnum<Globe.TinEnumType>(tinType, out var tinEnum))
+                    {
+                        tin.TypeOfTin = tinEnum;
+                        tin.TypeOfTinSpecified = true;
+                    }
+                    if (!string.IsNullOrEmpty(issuedBy)
+                        && TryParseEnum<Globe.CountryCodeType>(issuedBy, out var issuedByCode))
+                    {
+                        tin.IssuedBy = issuedByCode;
+                        tin.IssuedBySpecified = true;
+                    }
+                }
+
+                // 소재지국
+                Globe.CountryCodeType cc = default;
+                if (!string.IsNullOrEmpty(resCc)
+                    && !System.Enum.TryParse(resCc, true, out cc))
+                {
+                    errors.Add($"[{fileName}] [3.4.1 모기업{i + 1}] 소재지국 '{resCc}' 파싱 실패 (O{row})");
+                }
+
+                // 소득산입비율 (decimal)
+                decimal.TryParse(incRatio,
+                    System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var inclusionRatio);
+
+                iir.ParentEntity.Add(new Globe.LowTaxJurisdictionTypeLtceIirParentEntity
+                {
+                    Tin                      = tin,
+                    ResCountryCode           = cc,
+                    OtherOwnershipAllocation = string.IsNullOrEmpty(other) ? "0" : other,
+                    InclusionRatio           = inclusionRatio,
+                    TopUpTaxShare            = string.IsNullOrEmpty(tutShare) ? "0" : tutShare,
+                    IirOffSet                = string.IsNullOrEmpty(iirOff) ? "0" : iirOff,
+                    TopUpTax                 = string.IsNullOrEmpty(topUpTax) ? "0" : topUpTax,
+                });
+            }
+        }
+
         // ─── 3.4.2: 소득산입보완규칙(UTPR) → LowTaxJurisdiction.Utpr ─────────
         // 1: 납세자번호(XML 미포함), 2: Article2.5.1TopUpTax, 3: TotalUTPRTopUpTax — 모두 O(15)열
-        private static void Map342(
+        private void Map342(
             IXLWorksheet ws,
             Globe.JurisdictionSectionType js,
             List<string> errors,
@@ -1335,11 +1452,13 @@ namespace GlobeMapper.Services
             };
         }
 
-        // B열에서 contains 텍스트를 포함하는 첫 번째 행 반환 (-1 = 없음)
-        private static int FindRow(IXLWorksheet ws, string contains, int fromRow = 1)
+        // B열에서 contains 텍스트를 포함하는 행 반환 (-1 = 없음).
+        // fromRow/toRow 생략 시 현재 블록 범위(_blockStart, _blockEnd) 사용.
+        private int FindRow(IXLWorksheet ws, string contains, int fromRow = 0, int toRow = 0)
         {
-            var lastRow = ws.LastRowUsed()?.RowNumber() ?? 300;
-            for (int r = fromRow; r <= lastRow; r++)
+            if (fromRow <= 0) fromRow = _blockStart;
+            int end = toRow > 0 ? toRow : (_blockEnd > 0 ? _blockEnd : ws.LastRowUsed()?.RowNumber() ?? 300);
+            for (int r = fromRow; r <= end; r++)
             {
                 var v = ws.Cell(r, 2).GetString();
                 if (v != null && v.Contains(contains))

@@ -46,7 +46,9 @@ namespace GlobeMapper.Services
                     var val = ws.Cell(row, 15).GetString()?.Trim();
                     if (string.IsNullOrEmpty(val)) continue;
 
-                    hasData = true;
+                    // Change(변동여부)만으로는 실제 데이터로 간주하지 않음 — 템플릿 기본값("부") 회피.
+                    // Name 또는 Type 중 하나라도 있어야 실제 제외기업 엔트리.
+                    if (target != "Change") hasData = true;
                     var entry = new MappingEntry { Cell = $"O{row}", Label = target };
 
                     switch (target)

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using ClosedXML.Excel;
 
 namespace GlobeMapper.Services
@@ -8,9 +9,14 @@ namespace GlobeMapper.Services
         // 헤더 검색 키워드 (B열에서 이 문자열을 포함하는 행 = 블록 시작)
         private const string BLOCK_HEADER = "1.3.2.1";
 
+        // 소유지분 통합 입력 셀 (블록 내 상대 행 오프셋)
+        // 블록 시작(3행) + 8 = 11행 → O11 (병합 셀 O11:R14의 앵커)
+        // 포맷: "유형,TIN,TIN유형,발급국가,지분" × 주주 수 (주주 구분: ';')
+        private const int OWNERSHIP_ROW_OFFSET = 8;
+
         // 블록 내 상대 오프셋 (헤더 행 기준)
         // +1=변동, +2=소재지국, +3=규칙, +4=상호, +5=TIN,
-        // +6=접수TIN, +7=기업유형, +12=모기업유형, +13=QIIR TIN,
+        // +6=접수TIN, +7=기업유형, +8=소유지분(통합 O11:R14), +12=모기업유형, +13=QIIR TIN,
         // +14=부분소유TIN, +15=QUTPR초기, +16=소유합계, +17=UPE소유
         private static readonly (int Offset, string Target)[] FieldMap =
         {
@@ -28,9 +34,6 @@ namespace GlobeMapper.Services
             (16, "Ce.Qutpr.AggOwnership"),
             (17, "Ce.Qutpr.UpeOwnership"),
         };
-
-        // 별첨 시트 이름
-        private const string ATTACH_SHEET = "그룹구조 첨부";
 
         public Mapping_1_3_2_1()
             : base("mapping_1.3.2.1.json") { }
@@ -78,8 +81,14 @@ namespace GlobeMapper.Services
                         SetCeValue(ce, cs, target, val, errors, fileName, row);
                 }
 
-                // 별첨에서 소유지분 읽기 (블록 순서 = 별첨 번호)
-                MapOwnershipFromAttach(ws.Workbook, ce, blockIdx + 1, errors, fileName);
+                // 소유지분 통합 셀(O12) 파싱 — 주주 여러 명을 ';'로 구분, 각 주주는 ',' 5필드
+                var ownershipRow = blockStartRow + OWNERSHIP_ROW_OFFSET;
+                var ownershipCell = ws.Cell(ownershipRow, 15).GetString()?.Trim();
+                if (!string.IsNullOrEmpty(ownershipCell))
+                {
+                    hasData = true;
+                    MapOwnershipFromCell(ce, ownershipCell, ownershipRow, errors, fileName);
+                }
 
                 if (hasData)
                     cs.Ce.Add(ce);
@@ -194,77 +203,88 @@ namespace GlobeMapper.Services
         }
 
         /// <summary>
-        /// 별첨 시트에서 별첨N의 주주 데이터를 읽어 Ownership에 추가.
+        /// 소유지분 통합 셀 파싱.
+        /// 포맷: "유형,TIN,TIN유형,발급국가,지분" × N (주주 구분 ';')
+        /// 예: "GIR801, 1234567890, GIR3001, KR, 1; GIR802, 987, GIR3001, KR, 0.5"
         /// </summary>
-        private void MapOwnershipFromAttach(
-            IXLWorkbook workbook,
+        private void MapOwnershipFromCell(
             Globe.CorporateStructureTypeCe ce,
-            int attachNum,
+            string cellValue,
+            int row,
             List<string> errors,
             string fileName
         )
         {
-            if (!workbook.TryGetWorksheet(ATTACH_SHEET, out var attachWs))
-                return;
+            var shareholders = cellValue.Split(
+                ';',
+                System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries
+            );
 
-            // "별첨N" 제목 행 찾기
-            var startRow = FindAttachStart(attachWs, attachNum);
-            if (startRow < 0)
-                return;
-
-            // 제목(1) + 빈행(1) + 헤더(1) = 3행 뒤부터 데이터
-            var dataRow = startRow + 3;
-            while (true)
+            for (int i = 0; i < shareholders.Length; i++)
             {
-                var typeVal = attachWs.Cell(dataRow, 2).GetString()?.Trim();
-                var tinVal = attachWs.Cell(dataRow, 3).GetString()?.Trim();
-                var pctVal = attachWs.Cell(dataRow, 4).GetString()?.Trim();
+                var parts = shareholders[i].Split(
+                    ',',
+                    System.StringSplitOptions.TrimEntries
+                );
 
-                if (
-                    string.IsNullOrEmpty(typeVal)
-                    && string.IsNullOrEmpty(tinVal)
-                    && string.IsNullOrEmpty(pctVal)
-                )
-                    break;
-
-                // 다음 별첨 제목이면 종료
-                if (typeVal != null && typeVal.StartsWith("첨부"))
-                    break;
+                if (parts.Length == 0 || parts.All(string.IsNullOrEmpty))
+                    continue;
 
                 var ownership = new Globe.CorporateStructureTypeCeOwnership();
+                var entry = new MappingEntry
+                {
+                    Cell = $"O{row}",
+                    Label = $"소유지분[{i + 1}]",
+                };
 
-                if (!string.IsNullOrEmpty(typeVal))
+                // [0] 유형 (GIR801~806)
+                if (parts.Length >= 1 && !string.IsNullOrEmpty(parts[0]))
                     SetEnum<Globe.OwnershipTypeEnumType>(
-                        typeVal,
+                        parts[0],
                         v => ownership.OwnershipType = v,
                         errors,
                         fileName,
-                        new MappingEntry
-                        {
-                            Cell = $"첨부!B{dataRow}",
-                            Label = $"첨부{attachNum} 유형",
-                        }
+                        entry
                     );
 
-                // TIN 없으면 NOTIN 처리 (required 필드)
-                ownership.Tin = !string.IsNullOrEmpty(tinVal) ? ParseTin(tinVal) : NoTin();
-
-                if (!string.IsNullOrEmpty(pctVal))
+                // [1] TIN 값 + [2] TIN유형 (GIR300x) + [3] 발급국가 (ISO2)
+                var tinValue = parts.Length >= 2 ? parts[1] : null;
+                if (!string.IsNullOrEmpty(tinValue))
                 {
-                    // "90%" → "90", "0.9" → "0.9" 정규화 후 파싱
-                    var pctClean = pctVal.TrimEnd('%').Trim();
+                    var tin = new Globe.TinType { Value = tinValue };
+                    if (parts.Length >= 3 && !string.IsNullOrEmpty(parts[2])
+                        && TryParseEnum<Globe.TinEnumType>(parts[2], out var tinType))
+                    {
+                        tin.TypeOfTin = tinType;
+                        tin.TypeOfTinSpecified = true;
+                    }
+                    if (parts.Length >= 4 && !string.IsNullOrEmpty(parts[3])
+                        && TryParseEnum<Globe.CountryCodeType>(parts[3], out var country))
+                    {
+                        tin.IssuedBy = country;
+                        tin.IssuedBySpecified = true;
+                    }
+                    ownership.Tin = tin;
+                }
+                else
+                {
+                    ownership.Tin = NoTin();
+                }
+
+                // [4] 지분 (0~1 또는 % 단위)
+                if (parts.Length >= 5 && !string.IsNullOrEmpty(parts[4]))
+                {
+                    var pctClean = parts[4].TrimEnd('%').Trim();
                     if (decimal.TryParse(pctClean,
                         System.Globalization.NumberStyles.Any,
                         System.Globalization.CultureInfo.InvariantCulture,
                         out var pct))
                     {
-                        // >1이면 퍼센트 단위(예: 90 → 0.9), ≤1이면 이미 소수(예: 0.9 → 그대로)
                         ownership.OwnershipPercentage = pct > 1m ? pct / 100m : pct;
                     }
                 }
 
                 ce.Ownership.Add(ownership);
-                dataRow++;
             }
         }
 
@@ -283,18 +303,6 @@ namespace GlobeMapper.Services
                     result.Add(r);
             }
             return result;
-        }
-
-        private static int FindAttachStart(IXLWorksheet ws, int attachNum)
-        {
-            var target = $"첨부{attachNum}";
-            for (int r = 1; r <= 500; r++)
-            {
-                var val = ws.Cell(r, 2).GetString()?.Trim();
-                if (val == target)
-                    return r;
-            }
-            return -1;
         }
     }
 }
