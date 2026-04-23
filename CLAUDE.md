@@ -2,15 +2,13 @@
 
 ## 프로젝트 개요
 국조 서식(.xlsx) → OECD GloBE XML 변환 WinForms 프로그램.
-**단일 xlsx 파일** + **Control Panel** 방식 — Excel COM Interop으로 엑셀 직접 제어.
+**단일 xlsx 파일** — ClosedXML로 파일 직접 읽어 XML 변환.
 
 ## UX 흐름
 ```
-1. 메인 화면: [서식 작업] / [XML 변환하기] / [템플릿 다운로드]
+1. 메인 화면: [템플릿 다운로드] / [XML 변환]
 2. 템플릿 다운로드 → main_template.xlsx 복사
-3. 서식 작업 → 활성 Excel에 연결 (또는 파일 선택) → Control Panel 표시
-4. Control Panel (TopMost, 드래그 이동, 접기/펼치기): 현재 시트별 [+]/[-] 버튼
-5. XML 변환하기 → main_template.xlsx 선택 → 매핑 + 검증 → XML 저장
+3. XML 변환 → main_template.xlsx 선택 → 매핑 + 검증 → XML 저장
 ```
 
 ## 숨김시트 (_META)
@@ -24,8 +22,7 @@ blockCount:{시트명}   |  값(정수)
 mapper/
 ├── GlobeMapper.csproj
 ├── Program.cs
-├── MainForm.cs                     # 메인 화면 (템플릿 다운로드 / 서식 작업 / XML 변환)
-├── ControlPanelForm.cs             # Control Panel (TopMost, 블록 +/-, XML 변환)
+├── MainForm.cs                     # 메인 화면 (템플릿 다운로드 / XML 변환)
 ├── TermsDialog.cs
 ├── Services/
 │   ├── ExcelController.cs          # Excel COM 래퍼 (블록 추가/삭제, _META)

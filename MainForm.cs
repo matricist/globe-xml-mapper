@@ -8,9 +8,6 @@ namespace GlobeMapper
 {
     public class MainForm : Form
     {
-        private ExcelController _excel;
-        private ControlPanelForm _controlPanel;
-
         private static readonly string TemplatePath = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, "Resources", "main_template.xlsx");
 
@@ -38,7 +35,7 @@ namespace GlobeMapper
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox     = false;
             StartPosition   = FormStartPosition.CenterScreen;
-            ClientSize      = new Size(640, 540);
+            ClientSize      = new Size(640, 420);
             BackColor       = BG;
             ForeColor       = FG;
             Font            = new Font("Segoe UI", 10f);
@@ -76,13 +73,11 @@ namespace GlobeMapper
                 Padding    = new Padding(22, 6, 22, 10),
             };
 
-            var card1 = MakeStepCard(1, "템플릿 다운로드", "빈 서식 파일 내려받기",              false, BtnCreateMne_Click);
-            var card2 = MakeStepCard(2, "서식 작업",       "열린 Excel에 연결해 데이터 작성",    false, BtnSwitchToPanel_Click);
-            var card3 = MakeStepCard(3, "XML 변환",        "작성된 xlsx를 GIR XML로 변환",       true,  BtnConvert_Click);
+            var card1 = MakeStepCard(1, "템플릿 다운로드", "빈 서식 파일 내려받기",         false, BtnCreateMne_Click);
+            var card2 = MakeStepCard(2, "XML 변환",        "작성된 xlsx를 GIR XML로 변환", true,  BtnConvert_Click);
 
             content.Controls.Add(card1);
             content.Controls.Add(card2);
-            content.Controls.Add(card3);
 
             content.Resize += (s, e) =>
             {
@@ -90,11 +85,10 @@ namespace GlobeMapper
                 var w  = content.ClientSize.Width - content.Padding.Left - content.Padding.Right;
                 const int cardH = 90;
                 const int gap   = 14;
-                var totalH = cardH * 3 + gap * 2;
+                var totalH = cardH * 2 + gap;
                 var y0     = content.Padding.Top + Math.Max(0, (content.ClientSize.Height - content.Padding.Top - content.Padding.Bottom - totalH) / 2);
-                card1.SetBounds(x, y0,                     w, cardH);
-                card2.SetBounds(x, y0 + cardH + gap,       w, cardH);
-                card3.SetBounds(x, y0 + (cardH + gap) * 2, w, cardH);
+                card1.SetBounds(x, y0,               w, cardH);
+                card2.SetBounds(x, y0 + cardH + gap, w, cardH);
             };
 
             Controls.Add(content);
@@ -232,33 +226,6 @@ namespace GlobeMapper
         //  버튼 핸들러
         // ─────────────────────────────────────────────────────────────────────
 
-        private void BtnSwitchToPanel_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                _excel = new ExcelController();
-                _excel.AttachToActive();
-                ShowControlPanel();
-            }
-            catch
-            {
-                // 활성 Excel 없으면 파일 열기로 폴백
-                using var dlg = new OpenFileDialog
-                {
-                    Filter = "Excel 파일 (*.xlsx;*.xlsm)|*.xlsx;*.xlsm",
-                    Title  = "서식 파일 열기",
-                };
-                if (dlg.ShowDialog() != DialogResult.OK) return;
-                try
-                {
-                    _excel = new ExcelController();
-                    _excel.Open(dlg.FileName);
-                    ShowControlPanel();
-                }
-                catch (Exception ex2) { ShowError($"파일 열기 오류:\n{ex2.Message}"); }
-            }
-        }
-
         private void BtnCreateMne_Click(object sender, EventArgs e)
         {
             if (!File.Exists(TemplatePath))
@@ -277,14 +244,6 @@ namespace GlobeMapper
                 File.Copy(TemplatePath, dlg.FileName, overwrite: true);
                 MessageBox.Show($"MNE 파일이 생성되었습니다.\n{dlg.FileName}",
                     "완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-                if (MessageBox.Show("생성된 파일을 Excel로 여시겠습니까?", "열기",
-                        MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-                {
-                    _excel = new ExcelController();
-                    _excel.Open(dlg.FileName);
-                    ShowControlPanel();
-                }
             }
             catch (Exception ex) { ShowError($"파일 생성 오류:\n{ex.Message}"); }
         }
@@ -352,30 +311,6 @@ namespace GlobeMapper
                 }
             }
             catch (Exception ex) { ShowError($"XML 변환 오류:\n{ex.Message}"); }
-        }
-
-        // ─────────────────────────────────────────────────────────────────────
-        //  Excel COM 헬퍼
-        // ─────────────────────────────────────────────────────────────────────
-
-        private void ShowControlPanel()
-        {
-            Hide();
-            _controlPanel = new ControlPanelForm(_excel);
-            _controlPanel.FormClosed += (s, e) =>
-            {
-                _excel?.Dispose(); _excel = null;
-                _controlPanel = null;
-                Show();
-            };
-            _controlPanel.Show();
-        }
-
-        protected override void OnFormClosing(FormClosingEventArgs e)
-        {
-            _excel?.Dispose();
-            _controlPanel?.Close();
-            base.OnFormClosing(e);
         }
 
         private static void ShowError(string msg) =>
