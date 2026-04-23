@@ -1,0 +1,268 @@
+﻿{
+  "description": "국가별 계산",
+  "sheetName": "국가별 계산",
+  "sourceFile": "Mapping_JurCal.cs",
+  "note": "자동 생성 (GenerateMappingDocs). 개발자 참조용 — 실제 로드 안 됨.",
+  "sections": {
+    "MapJurisdiction": {
+      "description": "Map Jurisdiction",
+      "mappings": [
+        {
+          "cell": "O6",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "2. 하위그룹 유형(있는 경우)",
+          "multi": true
+        },
+        {
+          "cell": "O7",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "3. 실효세율 및 추가세액 계산이 필요한 하위그룹의 최상위기업 납세자번호(있는 경우)"
+        }
+      ]
+    },
+    "3.2.1": {
+      "description": "Map321 Overall Computation",
+      "mappings": [
+        {
+          "cell": "O87",
+          "target": "(inline)",
+          "label": "1. 이전 사업연도에서 이월된 잔액"
+        },
+        {
+          "cell": "O88",
+          "target": "(inline)",
+          "label": "2. 신고대상 사업연도 이월조정대상조세 발생액"
+        },
+        {
+          "cell": "O89",
+          "target": "(inline)",
+          "label": "3. 신고대상 사업연도 이월조정대상조세 사용액"
+        },
+        {
+          "cell": "O90",
+          "target": "(inline)",
+          "label": "4. 다음 사업연도로 이월되는 이월조정대상조세 잔액"
+        }
+      ]
+    },
+    "3.2.2": {
+      "description": "Map322 Transition",
+      "mappings": [
+        {
+          "cell": "O151",
+          "target": "(unresolved)",
+          "type": "decimal",
+          "label": "1. 최초적용연도"
+        }
+      ]
+    },
+    "3.2.2 (2)": {
+      "description": "Map322 Recapture",
+      "mappings": [
+        {
+          "cell": "J146",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "a. 「국제조세조정에 관한 법률 시행령」 제113조의2 및 같은 법 시행규칙 제74조의2제5항    제3호에 따른 최초적용연도 개시 전 발생한 이연법인세부채로서 환원되지 않고 남아    있는 것으로 보는 금액"
+        },
+        {
+          "cell": "N146",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "a. 「국제조세조정에 관한 법률 시행령」 제113조의2 및 같은 법 시행규칙 제74조의2제5항    제3호에 따른 최초적용연도 개시 전 발생한 이연법인세부채로서 환원되지 않고 남아    있는 것으로 보는 금액"
+        },
+        {
+          "cell": "J147",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "b. 「국제조세조정에 관한 법률 시행령」 제113조의2제1항에 따른 해당 사업연도 종료일 현재    이연법인세부채 금액"
+        },
+        {
+          "cell": "N147",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "b. 「국제조세조정에 관한 법률 시행령」 제113조의2제1항에 따른 해당 사업연도 종료일 현재    이연법인세부채 금액"
+        },
+        {
+          "cell": "J148",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "c. 「국제조세조정에 관한 법률 시행령」 제113조의2제1항에 따른 비적격잔액 금액"
+        },
+        {
+          "cell": "N148",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "c. 「국제조세조정에 관한 법률 시행령」 제113조의2제1항에 따른 비적격잔액 금액"
+        }
+      ]
+    },
+    "3.2.3": {
+      "description": "Map323 Election",
+      "mappings": [
+        {
+          "cell": "M47",
+          "target": "el.Art326",
+          "type": "bool",
+          "label": "(p) 총자산처분이익의 조정(「국제조세조정에 관한 법률 시행규칙」 별표 1 제10호)"
+        },
+        {
+          "cell": "M175",
+          "target": "el.Art461",
+          "type": "bool",
+          "label": "b. 대상조세의 경미한 감액에 대한 경정사업연도 반영 선택(「국제조세조정에 관한 법률」 제68조제2항)"
+        },
+        {
+          "cell": "M176",
+          "target": "el.Art531",
+          "type": "bool",
+          "label": "c. 실질기반제외소득 미적용 선택(「국제조세조정에 관한 법률 시행규칙」 제75조제14항)"
+        },
+        {
+          "cell": "M177",
+          "target": "el.Art415",
+          "type": "bool",
+          "label": "d. 이월조정대상조세 처리 선택(「국제조세조정에 관한 법률 시행령」 제119조제3항)"
+        },
+        {
+          "cell": "O190",
+          "target": "el.Art321C.KEquityInvestmentInclusionElection",
+          "type": "string",
+          "label": "1. 지분투자손익포함선택에 따른 지분손익 산입"
+        },
+        {
+          "cell": "O191",
+          "target": "el.Art321C.QualOwnerIntentBalance",
+          "type": "string",
+          "label": "2. 적격소유지분에 대한 투자가액의 이전 사업연도 잔액"
+        },
+        {
+          "cell": "O192",
+          "target": "el.Art321C.Additions",
+          "type": "string",
+          "label": "3. 적격소유지분에 대한 투자가액의 증액"
+        },
+        {
+          "cell": "O193",
+          "target": "el.Art321C.Reductions",
+          "type": "string",
+          "label": "4. 적격소유지분에 대한 투자가액의 감액"
+        },
+        {
+          "cell": "O194",
+          "target": "el.Art321C.OutstandingBalance",
+          "type": "string",
+          "label": "5. 적격소유지분에 대한 투자가액 잔액"
+        }
+      ]
+    },
+    "3.2.3 (2)": {
+      "description": "Map323 Deemed Dist Tax",
+      "mappings": [
+        {
+          "cell": "O197",
+          "target": "(unresolved)",
+          "type": "bool",
+          "label": "1. 간주분배세액 선택(「국제조세조정에 관한 법률」 제78조제1항)"
+        },
+        {
+          "cell": "B210",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "G210",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "M210",
+          "target": "(unresolved)",
+          "type": "string"
+        }
+      ]
+    },
+    "3.3.3": {
+      "description": "Map333 Additional Top Up Tax",
+      "mappings": [
+        {
+          "cell": "M246",
+          "target": "(inline)",
+          "label": "2. 소재지국 순글로벌최저한세결손"
+        },
+        {
+          "cell": "M247",
+          "target": "(inline)",
+          "label": "3. 조정대상조세 예상액"
+        },
+        {
+          "cell": "M248",
+          "target": "(inline)",
+          "label": "4. 당기추가세액가산액"
+        }
+      ]
+    },
+    "3.3.4": {
+      "description": "Map334 Qdmtt",
+      "mappings": [
+        {
+          "cell": "K252",
+          "target": "(inline)",
+          "label": "2. 적격소재국추가세액"
+        },
+        {
+          "cell": "K253",
+          "target": "(inline)",
+          "label": "3. 적격소재국추가세제도 최저한세율(15%보다 높은 경우)"
+        },
+        {
+          "cell": "K254",
+          "target": "(inline)",
+          "label": "4. 실효세율 계산을 위한 소득 및 세금 합산 기준(글로벌최저한세 규칙과 다른 경우)"
+        },
+        {
+          "cell": "K255",
+          "target": "(inline)",
+          "label": "5. 사용 통화(연결재무제표 작성 통화와 다른 경우)"
+        },
+        {
+          "cell": "K258",
+          "target": "(inline)",
+          "label": "7. 실질기반제외소득 적용가능 여부"
+        },
+        {
+          "cell": "K259",
+          "target": "(inline)",
+          "label": "8. 최소적용제외 특례 적용가능 여부"
+        }
+      ]
+    },
+    "MapShippingIncome": {
+      "description": "Map Shipping Income",
+      "mappings": [
+        {
+          "cell": "N214",
+          "target": "(inline)",
+          "label": "1. 모든 구성기업 또는 공동기업그룹 기업의 국제해운소득ㆍ결손 합계"
+        },
+        {
+          "cell": "N215",
+          "target": "(inline)",
+          "label": "2. 50% 한도"
+        },
+        {
+          "cell": "N216",
+          "target": "(inline)",
+          "label": "3. 모든 구성기업 또는 공동기업그룹 기업의 적격국제해운부수소득ㆍ결손 합계"
+        },
+        {
+          "cell": "N217",
+          "target": "(inline)",
+          "label": "4. B가 A의 50%를 넘는 경우의 한도 초과액"
+        }
+      ]
+    }
+  }
+}

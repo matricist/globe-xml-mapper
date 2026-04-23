@@ -1,51 +1,90 @@
-{
-  "description": "구성기업 및 공동기업그룹 기업 정보",
+﻿{
+  "description": "그룹구조",
   "sheetName": "그룹구조",
-  "repeatable": true,
-  "collectionTarget": "CE",
+  "sourceFile": "Mapping_1.3.2.1.cs",
+  "note": "자동 생성 (GenerateMappingDocs). 개발자 참조용 — 실제 로드 안 됨.",
   "sections": {
-    "변동사항": {
-      "description": "변동 여부",
+    "1.3.2.1": {
+      "description": "블록 반복 (BLOCK_HEADER=\"1.3.2.1\" (템플릿 행 3), 입력 열 = O)",
       "mappings": [
-        { "cell": "O4",  "target": "Ce.ChangeFlag",                    "type": "bool",                           "label": "1. 직전 사업연도 대비 변동 여부" }
-      ]
-    },
-    "소재지국": {
-      "description": "소재지국 및 적용규칙",
-      "mappings": [
-        { "cell": "O5",  "target": "Ce.Id.ResCountryCode",             "type": "enum:CountryCodeType",           "label": "2. 소재지국" },
-        { "cell": "O6",  "target": "Ce.Id.Rules",                      "type": "enum:IdTypeRulesEnumType",       "label": "3. 적용가능규칙", "multi": true }
-      ]
-    },
-    "구성기업정보": {
-      "description": "구성기업 기본 정보",
-      "mappings": [
-        { "cell": "O7",  "target": "Ce.Id.Name",                       "type": "string",                         "label": "4. 구성기업 상호" },
-        { "cell": "O8",  "target": "Ce.Id.Tin.Value",                  "type": "string",                         "label": "5. 납세자번호" },
-        { "cell": "O9",  "target": "Ce.Id.ReceivingTin",               "type": "string",                         "label": "6. 신고접수국가 납세자번호" },
-        { "cell": "O10", "target": "Ce.Id.GlobeStatus",                "type": "enum:IdTypeGloBeStatusEnumType",  "label": "7. 기업유형", "multi": true }
-      ]
-    },
-    "소유지분": {
-      "description": "소유지분 구조 — O11 통합 셀(병합 O11:R14)에서 읽음. 주주별 ';'로 구분, 필드는 '유형,TIN,TIN유형,발급국가,지분' 5개 콤마 구분. 예: 'GIR801, 1234567890, GIR3001, KR, 1; GIR802, 987, GIR3001, KR, 0.5'",
-      "mappings": [
-        { "cell": "O11", "target": "Ce.Ownership", "type": "string", "label": "8-10. 소유지분(유형,TIN,TIN유형,발급국가,지분; 주주별 ';' 구분)" }
-      ]
-    },
-    "QIIR": {
-      "description": "적격소득산입규칙 적용 여부",
-      "mappings": [
-        { "cell": "O15", "target": "Ce.Qiir.PopeIpe",                  "type": "enum:PopeipeEnumType",           "label": "11. 모기업 유형" },
-        { "cell": "O16", "target": "Ce.Qiir.Exception.Tin.Value",      "type": "string",                         "label": "12. QIIR 모기업 납세자번호" },
-        { "cell": "O17", "target": "Ce.Qiir.MopeIpe.Tin.Value",        "type": "string",                         "label": "13. 부분소유모기업 납세자번호" }
-      ]
-    },
-    "QUTPR": {
-      "description": "적격소득산입보완규칙 적용 여부",
-      "mappings": [
-        { "cell": "O18", "target": "Ce.Qutpr.Art93",                   "type": "bool",                           "label": "14. 해외진출 초기 특례 적용 여부" },
-        { "cell": "O19", "target": "Ce.Qutpr.AggOwnership",            "type": "decimal",                        "label": "15. 소유지분 합계(%)" },
-        { "cell": "O20", "target": "Ce.Qutpr.UpeOwnership",            "type": "bool",                           "label": "16. UPE 소유지분이 합계보다 큰지 여부" }
+        {
+          "cell": "O4",
+          "target": "Ce.ChangeFlag",
+          "type": "bool",
+          "label": "변동사항"
+        },
+        {
+          "cell": "O5",
+          "target": "Ce.Id.ResCountryCode",
+          "type": "enum:CountryCodeType",
+          "label": "소재지국"
+        },
+        {
+          "cell": "O6",
+          "target": "Ce.Id.Rules",
+          "type": "enum:IdTypeRulesEnumType",
+          "label": "3. 적용가능규칙"
+        },
+        {
+          "cell": "O7",
+          "target": "Ce.Id.Name",
+          "type": "string",
+          "label": "구성기업, 공동기업 또는 공동기업 자회사 정보"
+        },
+        {
+          "cell": "O8",
+          "target": "Ce.Id.Tin.Value",
+          "type": "string",
+          "label": "5. 납세자번호"
+        },
+        {
+          "cell": "O9",
+          "target": "Ce.Id.ReceivingTin",
+          "type": "string",
+          "label": "6. 신고 접수 국가의 납세자번호(있는 경우)"
+        },
+        {
+          "cell": "O10",
+          "target": "Ce.Id.GlobeStatus",
+          "type": "enum:IdTypeGloBeStatusEnumType",
+          "label": "7. 글로벌최저한세 목적상 기업유형"
+        },
+        {
+          "cell": "O15",
+          "target": "Ce.Qiir.PopeIpe",
+          "type": "string",
+          "label": "구성기업이 부분소유모기업 또는 중간모기업인 경우 해당 구성기업에 적격소득산입규칙이 적용되는지 여부"
+        },
+        {
+          "cell": "O16",
+          "target": "Ce.Qiir.Exception.Art213.Tin",
+          "type": "tin",
+          "label": "12. 최종모기업 또는 다른 중간모기업에 소득산입규칙이 적용되는 경우 해당 최종모기업 또는 중간모기업의 납세자번호(「국제조세조정에 관한 법률」 제72조제3항 및 제4항)"
+        },
+        {
+          "cell": "O17",
+          "target": "Ce.Qiir.Exception.Art215.Tin",
+          "type": "tin",
+          "label": "13. 다른 부분소유모기업에 적격소득산입규칙이 적용되는 경우 해당 부분소유모기업의 납세자번호(「국제조세조정에 관한 법률」 제72조제6항)"
+        },
+        {
+          "cell": "O18",
+          "target": "Ce.Qutpr.Art93",
+          "type": "bool",
+          "label": "해당 기업에 적격소득산입보완규칙이 적용되는지 여부"
+        },
+        {
+          "cell": "O19",
+          "target": "Ce.Qutpr.AggOwnership",
+          "type": "string",
+          "label": "15. 구성기업 또는 공동기업그룹 기업(다국적기업그룹의 구성기업으로 보는 공동기업 및 공동기업의 자회사를 의미합니다)과 관련하여 적격소득산입규칙이 적용되는 모기업이 보유하는 해당 구성기업의 소유지분(공동기업 및 공동기업의 자회사의 경우에는 추가세액배분액으로 합니다) 합계(%)"
+        },
+        {
+          "cell": "O20",
+          "target": "Ce.Qutpr.UpeOwnership",
+          "type": "bool",
+          "label": "16. 최종모기업의 해당 구성기업(해당 공동기업그룹 기업) 소유지분(추가세액배분액)이 해당 구성기업(해당 공동기업그룹 기업)과 관련하여 적격소득산입규칙이 적용되는 모기업의 해당 구성기업(해당 공동기업그룹 기업) 소유지분 합계(추가세액배분액 합계)보다 큰지 여부"
+        }
       ]
     }
   }

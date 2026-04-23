@@ -1,75 +1,230 @@
-{
-  "description": "국가별 적용면제 및 제외 (Summary 상세)",
+﻿{
+  "description": "적용면제",
   "sheetName": "적용면제",
-  "repeatable": false,
+  "sourceFile": "Mapping_2.cs",
+  "note": "자동 생성 (GenerateMappingDocs). 개발자 참조용 — 실제 로드 안 됨.",
   "sections": {
-    "2.1": {
-      "description": "국가별 기본사항",
+    "MapOneCountry": {
+      "description": "Map One Country",
       "mappings": [
-        { "cell": "O5",  "target": "Summary.Jurisdiction.JurisdictionName", "type": "enum:CountryCodeType",       "label": "1. 소재지국" },
-        { "cell": "O6",  "target": "Summary.Jurisdiction.Subgroup.Type",    "type": "enum:TypeofSubGroupEnumType", "label": "2. 하위그룹 유형" },
-        { "cell": "O7",  "target": "Summary.Jurisdiction.Subgroup.Tin",     "type": "string",                      "label": "3. 하위그룹 최상위기업 TIN" },
-        { "cell": "O8",  "target": "Summary.JurWithTaxingRights.JurisdictionName", "type": "enum:CountryCodeType", "label": "4. 과세권 국가" },
-        { "cell": "O9",  "target": "Summary.JurWithTaxingRights.ReportDifference", "type": "bool",                 "label": "5. 보고내용 차이 여부" }
-      ]
-    },
-    "2.2.1": {
-      "description": "적용면제",
-      "mappings": [
-        { "cell": "O14", "target": "Summary.SafeHarbour", "type": "enum:SafeHarbourEnumType", "label": "1. 적용면제 유형" }
-      ]
-    },
-    "2.2.1.2": {
-      "description": "일반적 적용면제 - 간소화 계산",
-      "mappings": [
-        { "cell": "H18", "target": "Summary.EtrException.DeminimisNmce.Rfy1.Revenue",     "type": "string", "label": "총수익 - 신고연도" },
-        { "cell": "N18", "target": "Summary.EtrException.DeminimisNmce.Rfy1.SimplifiedTax","type": "string", "label": "간이세액 - 신고연도" },
-        { "cell": "H19", "target": "Summary.EtrException.DeminimisNmce.Rfy2.Revenue",     "type": "string", "label": "총수익 - 직전연도" },
-        { "cell": "N19", "target": "Summary.EtrException.DeminimisNmce.Rfy2.SimplifiedTax","type": "string", "label": "간이세액 - 직전연도" },
-        { "cell": "H20", "target": "Summary.EtrException.DeminimisNmce.Rfy3.Revenue",     "type": "string", "label": "총수익 - 직전전연도" },
-        { "cell": "N20", "target": "Summary.EtrException.DeminimisNmce.Rfy3.SimplifiedTax","type": "string", "label": "간이세액 - 직전전연도" },
-        { "cell": "H21", "target": "Summary.EtrException.DeminimisNmce.Average.Revenue",  "type": "string", "label": "총수익 - 3년평균" },
-        { "cell": "N21", "target": "Summary.EtrException.DeminimisNmce.Average.SimplifiedTax","type": "string", "label": "간이세액 - 3년평균" }
-      ]
-    },
-    "2.2.1.3": {
-      "description": "전환기 적용면제",
-      "mappings": [
-        { "cell": "O27", "target": "Summary.EtrException.TransCbcr.Revenue",    "type": "string", "label": "1. 총수익금액" },
-        { "cell": "O28", "target": "Summary.EtrException.TransCbcr.ProfitLoss", "type": "string", "label": "2. 세전손익금액" },
-        { "cell": "O29", "target": "Summary.EtrException.TransCbcr.IncomeTax",  "type": "string", "label": "3. 간이 대상조세" },
-        { "cell": "O32", "target": "Summary.EtrException.UtprSafeHarbour.CITRate","type": "string","label": "1. 법인세 명목세율" }
-      ]
-    },
-    "2.2.2": {
-      "description": "최소적용제외 특례",
-      "mappings": [
-        { "cell": "E38", "target": "Summary.EtrException.DeminimisNmce.Rfy1.AccountingRevenue",   "type": "string", "label": "회계매출-신고" },
-        { "cell": "I38", "target": "Summary.EtrException.DeminimisNmce.Rfy1.GlobeRevenue",        "type": "string", "label": "GloBE매출-신고" },
-        { "cell": "L38", "target": "Summary.EtrException.DeminimisNmce.Rfy1.AccountingProfitLoss","type": "string", "label": "회계순이익-신고" },
-        { "cell": "O38", "target": "Summary.EtrException.DeminimisNmce.Rfy1.GlobeProfitLoss",     "type": "string", "label": "GloBE소득-신고" },
-        { "cell": "E39", "target": "Summary.EtrException.DeminimisNmce.Rfy2.AccountingRevenue",   "type": "string", "label": "회계매출-직전" },
-        { "cell": "I39", "target": "Summary.EtrException.DeminimisNmce.Rfy2.GlobeRevenue",        "type": "string", "label": "GloBE매출-직전" },
-        { "cell": "L39", "target": "Summary.EtrException.DeminimisNmce.Rfy2.AccountingProfitLoss","type": "string", "label": "회계순이익-직전" },
-        { "cell": "O39", "target": "Summary.EtrException.DeminimisNmce.Rfy2.GlobeProfitLoss",     "type": "string", "label": "GloBE소득-직전" },
-        { "cell": "E40", "target": "Summary.EtrException.DeminimisNmce.Rfy3.AccountingRevenue",   "type": "string", "label": "회계매출-직전전" },
-        { "cell": "I40", "target": "Summary.EtrException.DeminimisNmce.Rfy3.GlobeRevenue",        "type": "string", "label": "GloBE매출-직전전" },
-        { "cell": "L40", "target": "Summary.EtrException.DeminimisNmce.Rfy3.AccountingProfitLoss","type": "string", "label": "회계순이익-직전전" },
-        { "cell": "O40", "target": "Summary.EtrException.DeminimisNmce.Rfy3.GlobeProfitLoss",     "type": "string", "label": "GloBE소득-직전전" },
-        { "cell": "E41", "target": "Summary.EtrException.DeminimisNmce.Average.AccountingRevenue", "type": "string", "label": "회계매출-3년평균" },
-        { "cell": "I41", "target": "Summary.EtrException.DeminimisNmce.Average.GlobeRevenue",      "type": "string", "label": "GloBE매출-3년평균" },
-        { "cell": "L41", "target": "Summary.EtrException.DeminimisNmce.Average.AccountingProfitLoss","type": "string","label": "회계순이익-3년평균" },
-        { "cell": "O41", "target": "Summary.EtrException.DeminimisNmce.Average.GlobeProfitLoss",   "type": "string", "label": "GloBE소득-3년평균" }
-      ]
-    },
-    "2.3": {
-      "description": "해외진출 초기 특례 (첫 블록 기준 행 번호)",
-      "mappings": [
-        { "cell": "M42", "target": "Summary.InitialIntActivity.StartDate",     "type": "date",   "label": "1. 최초적용연도 개시일" },
-        { "cell": "M43", "target": "Summary.InitialIntActivity.ReferenceJur",  "type": "enum:CountryCodeType", "label": "2. 준거국가" },
-        { "cell": "M44", "target": "Summary.InitialIntActivity.TangibleAsset", "type": "string", "label": "3. 준거국가 유형자산" },
-        { "cell": "M45", "target": "Summary.InitialIntActivity.NumCountries",  "type": "string", "label": "4. 구성기업 소재 국가 수" },
-        { "cell": "M46", "target": "Summary.InitialIntActivity.OtherJurisdiction", "type": "string", "label": "5. 준거국가 외 유형자산(통합 셀: 국가코드(ISO2),유형자산값; 국가,값). 예: 'KR,100000000; US,50000000'" }
+        {
+          "cell": "O5",
+          "target": "<init>.JurisdictionName",
+          "type": "enum:CountryCodeType",
+          "label": "1. 소재지국(국가명)"
+        },
+        {
+          "cell": "O8",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "4. 과세권이 있는 국가",
+          "multi": true
+        },
+        {
+          "cell": "O14",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "1. 적용면제 유형 선택",
+          "multi": true
+        },
+        {
+          "cell": "H18",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "a. 신고대상 사업연도"
+        },
+        {
+          "cell": "N18",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "a. 신고대상 사업연도"
+        },
+        {
+          "cell": "H19",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "b. 직전 사업연도(해당되는 경우)"
+        },
+        {
+          "cell": "N19",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "b. 직전 사업연도(해당되는 경우)"
+        },
+        {
+          "cell": "H20",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "c. 직전전 사업연도(해당되는 경우)"
+        },
+        {
+          "cell": "N20",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "c. 직전전 사업연도(해당되는 경우)"
+        },
+        {
+          "cell": "H21",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "d. 3개 사업연도 평균(해당되는 경우)"
+        },
+        {
+          "cell": "N21",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "d. 3개 사업연도 평균(해당되는 경우)"
+        },
+        {
+          "cell": "O25",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "1. 총수익금액"
+        },
+        {
+          "cell": "O26",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "2. 세전손익금액"
+        },
+        {
+          "cell": "O27",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "3. 간이 대상조세 금액(「국제조세조정에 관한 법률 시행규칙」 제86조제5항 및 제7항)"
+        },
+        {
+          "cell": "O30",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "1. 법인세 명목세율"
+        },
+        {
+          "cell": "E36",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "a. 신고대상 사업연도"
+        },
+        {
+          "cell": "I36",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "a. 신고대상 사업연도"
+        },
+        {
+          "cell": "L36",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "a. 신고대상 사업연도"
+        },
+        {
+          "cell": "O36",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "a. 신고대상 사업연도"
+        },
+        {
+          "cell": "E37",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "b. 직전 사업연도(해당되는 경우)"
+        },
+        {
+          "cell": "I37",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "b. 직전 사업연도(해당되는 경우)"
+        },
+        {
+          "cell": "L37",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "b. 직전 사업연도(해당되는 경우)"
+        },
+        {
+          "cell": "O37",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "b. 직전 사업연도(해당되는 경우)"
+        },
+        {
+          "cell": "E38",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "c. 직전전 사업연도(해당되는 경우)"
+        },
+        {
+          "cell": "I38",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "c. 직전전 사업연도(해당되는 경우)"
+        },
+        {
+          "cell": "L38",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "c. 직전전 사업연도(해당되는 경우)"
+        },
+        {
+          "cell": "O38",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "c. 직전전 사업연도(해당되는 경우)"
+        },
+        {
+          "cell": "E39",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "d. 3개 사업연도 평균"
+        },
+        {
+          "cell": "I39",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "d. 3개 사업연도 평균"
+        },
+        {
+          "cell": "L39",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "d. 3개 사업연도 평균"
+        },
+        {
+          "cell": "O39",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "d. 3개 사업연도 평균"
+        },
+        {
+          "cell": "M42",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "1. 다국적기업그룹의 최초적용연도 개시일"
+        },
+        {
+          "cell": "M43",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "2. 준거국가"
+        },
+        {
+          "cell": "M44",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "3. 다국적기업그룹의 최초적용연도에 준거국가에 소재하는 유형자산의 순장부가액 합계"
+        },
+        {
+          "cell": "M45",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "4. 다국적기업그룹의 최초적용연도에 구성기업이 소재하는 국가 수"
+        },
+        {
+          "cell": "M46",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "5. 다국적기업그룹의 최초적용연도에 준거국가 외 국가에 소재하는 구성기업의 유형자산"
+        }
       ]
     }
   }

@@ -30,10 +30,17 @@ namespace Globe
     public partial class EtrTypeElectionArt321C
     {
         // 하위 선택 필드들 — null/빈 문자열이면 <태그 /> 출력 방지
-        public bool ShouldSerializeKEquityInvestmentInclusionElection() => !string.IsNullOrEmpty(KEquityInvestmentInclusionElection);
-        public bool ShouldSerializeQualOwnerIntentBalance() => !string.IsNullOrEmpty(QualOwnerIntentBalance);
+        public bool ShouldSerializeKEquityInvestmentInclusionElection() =>
+            !string.IsNullOrEmpty(KEquityInvestmentInclusionElection);
+
+        public bool ShouldSerializeQualOwnerIntentBalance() =>
+            !string.IsNullOrEmpty(QualOwnerIntentBalance);
+
         public bool ShouldSerializeAdditions() => !string.IsNullOrEmpty(Additions);
+
         public bool ShouldSerializeReductions() => !string.IsNullOrEmpty(Reductions);
-        public bool ShouldSerializeOutstandingBalance() => !string.IsNullOrEmpty(OutstandingBalance);
+
+        public bool ShouldSerializeOutstandingBalance() =>
+            !string.IsNullOrEmpty(OutstandingBalance);
     }
 }

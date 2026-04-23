@@ -1,0 +1,53 @@
+﻿{
+  "description": "UTPR 배분",
+  "sheetName": "UTPR 배분",
+  "sourceFile": "Mapping_Utpr.cs",
+  "note": "자동 생성 (GenerateMappingDocs). 개발자 참조용 — 실제 로드 안 됨.",
+  "sections": {
+    "rows": {
+      "description": "행 반복: 행 4부터 EOF까지 각 행에서 여러 열 읽음",
+      "mappings": [
+        {
+          "cell": "B4",
+          "target": "UtprAttributionTypeAttribution.ResCountryCode",
+          "type": "enum:CountryCodeType"
+        },
+        {
+          "cell": "C4",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "E4",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "G4",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "L4",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "N4",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "Q4",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "J4",
+          "target": "(unresolved)",
+          "type": "string"
+        }
+      ]
+    }
+  }
+}

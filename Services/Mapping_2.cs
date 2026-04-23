@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using ClosedXML.Excel;
@@ -14,27 +14,33 @@ namespace GlobeMapper.Services
     ///   2.1  : O(b1+3)=국가, O(b1+6)=과세권국가
     ///   2.2.1: O(b1+12)=SafeHarbour
     ///   2.2.1.2: H/N(b1+16~b1+19)=간소화계산
-    ///   2.2.1.3: O(b2+1)=수익, O(b2+2)=세전손익, O(b2+3)=간이세액, O(b2+6)=CIT율
-    ///   2.2.2: B(b2+9)=GIR2901체크, B(b2+10)=GIR2902체크
-    ///          E/I/L/O(b2+12~b2+15)=FinancialData(신고/직전/직전전/평균)
+    ///   2.2.1.3: O(b2+0)=수익, O(b2+1)=세전손익, O(b2+2)=간이세액, O(b2+5)=CIT율
+    ///   2.2.2: B(b2+8)=GIR2901체크, B(b2+9)=GIR2902체크
+    ///          E/I/L/O(b2+11~b2+14)=FinancialData(신고/직전/직전전/평균)
     ///   2.3  : M(b2+17)=개시일, M(b2+18)=준거국가, M(b2+19)=유형자산,
     ///          M(b2+20)=국가수, M(b2+21)=준거국가 외 유형자산(통합 셀 — 국가,값; 국가,값)
     /// </summary>
     public class Mapping_2 : MappingBase
     {
         private const int BLOCK1_START = 2;
-        private const int BLOCK1_SIZE = 21;  // rows 2~22 (inclusive)
-        private const int GAP = 2;           // rows 23~24
-        private const int SET_SIZE = 52;     // 21+2+29
-        private const int SET_GAP = 2;       // 세트 간 간격
+        private const int BLOCK1_SIZE = 21; // rows 2~22 (inclusive)
+        private const int GAP = 2; // rows 23~24
+        private const int SET_SIZE = 52; // 21+2+29
+        private const int SET_GAP = 2; // 세트 간 간격
 
-        public Mapping_2() : base("mapping_2.json") { }
+        public Mapping_2()
+            : base(null) { }
 
-        public override void Map(IXLWorksheet ws, Globe.GlobeOecd globe, List<string> errors, string fileName)
+        public override void Map(
+            IXLWorksheet ws,
+            Globe.GlobeOecd globe,
+            List<string> errors,
+            string fileName
+        )
         {
             var blockCount = 1;
-            if (ws.Workbook.TryGetWorksheet(ExcelController.MetaSheetName, out var metaWs))
-                blockCount = ExcelController.ReadBlockCount(metaWs, ws.Name);
+            if (ws.Workbook.TryGetWorksheet(TemplateMeta.MetaSheetName, out var metaWs))
+                blockCount = TemplateMeta.ReadBlockCount(metaWs, ws.Name);
 
             for (int idx = 0; idx < blockCount; idx++)
             {
@@ -44,26 +50,36 @@ namespace GlobeMapper.Services
             }
         }
 
-        private void MapOneCountry(IXLWorksheet ws,
-            Globe.GlobeOecd globe, List<string> errors, string fileName,
-            int b1, int b2, int blockNum)
+        private void MapOneCountry(
+            IXLWorksheet ws,
+            Globe.GlobeOecd globe,
+            List<string> errors,
+            string fileName,
+            int b1,
+            int b2,
+            int blockNum
+        )
         {
             // ─── 2.1 소재지국 (O5 = b1+3) ─────────────────────────────────
-            var jurCode = ws.Cell(b1 + 3, 15).GetString()?.Trim();
-            if (string.IsNullOrEmpty(jurCode)) return;
+            var jurCode = ws.Cell(b1 + 3, 15).GetString()?.Trim(); // O5
+            if (string.IsNullOrEmpty(jurCode))
+                return;
 
             if (!TryParseEnum<Globe.CountryCodeType>(jurCode, out var countryCode))
             {
-                errors.Add($"[{fileName}] 적용면제 블록{blockNum}: 소재지국 코드 '{jurCode}' 파싱 실패");
+                errors.Add(
+                    $"[{fileName}] 적용면제 블록{blockNum}: 소재지국 코드 '{jurCode}' 파싱 실패"
+                );
                 return;
             }
 
             var loc = $"2 적용면제/블록{blockNum}('{jurCode}')";
 
             // ─── Summary 찾기 또는 생성 ───────────────────────────────────
-            var summary = globe.GlobeBody.Summary
-                .FirstOrDefault(s => s.Jurisdiction?.JurisdictionNameSpecified == true
-                                  && s.Jurisdiction.JurisdictionName == countryCode);
+            var summary = globe.GlobeBody.Summary.FirstOrDefault(s =>
+                s.Jurisdiction?.JurisdictionNameSpecified == true
+                && s.Jurisdiction.JurisdictionName == countryCode
+            );
             if (summary == null)
             {
                 summary = new Globe.GlobeBodyTypeSummary
@@ -71,97 +87,116 @@ namespace GlobeMapper.Services
                     Jurisdiction = new Globe.SummaryTypeJurisdiction
                     {
                         JurisdictionName = countryCode,
-                        JurisdictionNameSpecified = true
-                    }
+                        JurisdictionNameSpecified = true,
+                    },
                 };
                 globe.GlobeBody.Summary.Add(summary);
             }
 
             // 과세권 국가 (O8=b1+6) — JurisdictionSection.JurWithTaxingRights로 이동 (js 생성 후 처리)
-            var taxJurRaw = ws.Cell(b1 + 6, 15).GetString()?.Trim();
+            var taxJurRaw = ws.Cell(b1 + 6, 15).GetString()?.Trim(); // O8
 
             // ─── 2.2.1 적용면제 (O14=b1+12) ──────────────────────────────
-            var safeHarbourRaw = ws.Cell(b1 + 12, 15).GetString()?.Trim();
+            var safeHarbourRaw = ws.Cell(b1 + 12, 15).GetString()?.Trim(); // O14
             if (!string.IsNullOrEmpty(safeHarbourRaw))
             {
-                foreach (var code in safeHarbourRaw.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
-                    SetEnum<Globe.SafeHarbourEnumType>(code, v =>
-                    {
-                        if (!summary.SafeHarbour.Contains(v))
-                            summary.SafeHarbour.Add(v);
-                    }, errors, fileName, new MappingEntry { Cell = $"O{b1 + 12}", Label = $"[{loc}] 적용면제" });
+                foreach (
+                    var code in safeHarbourRaw.Split(
+                        ',',
+                        StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries
+                    )
+                )
+                    SetEnum<Globe.SafeHarbourEnumType>(
+                        code,
+                        v =>
+                        {
+                            if (!summary.SafeHarbour.Contains(v))
+                                summary.SafeHarbour.Add(v);
+                        },
+                        errors,
+                        fileName,
+                        new MappingEntry { Cell = $"O{b1 + 12}", Label = $"[{loc}] 적용면제" }
+                    );
             }
 
             // ─── 2.2.1.2 간소화 데이터 (H18-N21 = b1+16 ~ b1+19) ────────
-            var s1Rev = ws.Cell(b1 + 16, 8).GetString()?.Trim();   // H18
-            var s1Tax = ws.Cell(b1 + 16, 14).GetString()?.Trim();  // N18
-            var s2Rev = ws.Cell(b1 + 17, 8).GetString()?.Trim();   // H19
-            var s2Tax = ws.Cell(b1 + 17, 14).GetString()?.Trim();  // N19
-            var s3Rev = ws.Cell(b1 + 18, 8).GetString()?.Trim();   // H20
-            var s3Tax = ws.Cell(b1 + 18, 14).GetString()?.Trim();  // N20
-            var saRev = ws.Cell(b1 + 19, 8).GetString()?.Trim();   // H21
-            var saTax = ws.Cell(b1 + 19, 14).GetString()?.Trim();  // N21
+            var s1Rev = ws.Cell(b1 + 16, 8).GetString()?.Trim(); // H18
+            var s1Tax = ws.Cell(b1 + 16, 14).GetString()?.Trim(); // N18
+            var s2Rev = ws.Cell(b1 + 17, 8).GetString()?.Trim(); // H19
+            var s2Tax = ws.Cell(b1 + 17, 14).GetString()?.Trim(); // N19
+            var s3Rev = ws.Cell(b1 + 18, 8).GetString()?.Trim(); // H20
+            var s3Tax = ws.Cell(b1 + 18, 14).GetString()?.Trim(); // N20
+            var saRev = ws.Cell(b1 + 19, 8).GetString()?.Trim(); // H21
+            var saTax = ws.Cell(b1 + 19, 14).GetString()?.Trim(); // N21
 
-            // ─── 2.2.1.3 전환기 데이터 (b2+1 ~ b2+6) ─────────────────────
-            // O26=b2+1: 총수익, O27=b2+2: 세전손익, O28=b2+3: 간이대상조세
-            // O31=b2+6: 법인세 명목세율
-            var cbcrRev  = ws.Cell(b2 + 1, 15).GetString()?.Trim();  // O26
-            var cbcrPl   = ws.Cell(b2 + 2, 15).GetString()?.Trim();  // O27
-            var cbcrTax  = ws.Cell(b2 + 3, 15).GetString()?.Trim();  // O28
-            var utprRate = ws.Cell(b2 + 6, 15).GetString()?.Trim();  // O31
+            // ─── 2.2.1.3 전환기 데이터 (b2+0 ~ b2+5) ─────────────────────
+            // O25=b2+0: 총수익, O26=b2+1: 세전손익, O27=b2+2: 간이대상조세
+            // O30=b2+5: 법인세 명목세율
+            var cbcrRev = ws.Cell(b2 + 0, 15).GetString()?.Trim(); // O25
+            var cbcrPl = ws.Cell(b2 + 1, 15).GetString()?.Trim(); // O26
+            var cbcrTax = ws.Cell(b2 + 2, 15).GetString()?.Trim(); // O27
+            var utprRate = ws.Cell(b2 + 5, 15).GetString()?.Trim(); // O30
 
-            // ─── 2.2.2 체크박스 (b2+8=섹션헤더, b2+9=GIR2901, b2+10=GIR2902) ──
-            // R34=b2+9: □/■ 신고대상 사업연도 → GIR2901
-            // R35=b2+10: □/■ 중요성이 낮은 구성기업 → GIR2902
+            // ─── 2.2.2 체크박스 (b2+8=GIR2901, b2+9=GIR2902) ──────────────
+            // R33=b2+8: □/■ 신고대상 사업연도 → GIR2901
+            // R34=b2+9: □/■ 중요성이 낮은 구성기업 → GIR2902
             Globe.DeminimisSimpleBasisEnumType? deminiBasis = null;
-            if (RowContains(ws, b2 + 9, "■"))
+            if (RowContains(ws, b2 + 8, "■"))
                 deminiBasis = Globe.DeminimisSimpleBasisEnumType.Gir2901;
-            else if (RowContains(ws, b2 + 10, "■"))
+            else if (RowContains(ws, b2 + 9, "■"))
                 deminiBasis = Globe.DeminimisSimpleBasisEnumType.Gir2902;
 
-            // ─── 2.2.2 상세 재무 데이터 (b2+12 ~ b2+15) ──────────────────
-            // R37=b2+12: 신고대상, R38=b2+13: 직전, R39=b2+14: 직전전, R40=b2+15: 3년평균
+            // ─── 2.2.2 상세 재무 데이터 (b2+11 ~ b2+14) ──────────────────
+            // R36=b2+11: 신고대상, R37=b2+12: 직전, R38=b2+13: 직전전, R39=b2+14: 3년평균
             // 열: E(5)=회계매출, I(9)=GloBE매출, L(12)=회계순이익, O(15)=GloBE소득
-            var f1AcRev = ws.Cell(b2 + 12, 5).GetString()?.Trim();   // E37
-            var f1GbRev = ws.Cell(b2 + 12, 9).GetString()?.Trim();   // I37
-            var f1AcPl  = ws.Cell(b2 + 12, 12).GetString()?.Trim();  // L37
-            var f1GbPl  = ws.Cell(b2 + 12, 15).GetString()?.Trim();  // O37
-            var f2AcRev = ws.Cell(b2 + 13, 5).GetString()?.Trim();   // E38
-            var f2GbRev = ws.Cell(b2 + 13, 9).GetString()?.Trim();   // I38
-            var f2AcPl  = ws.Cell(b2 + 13, 12).GetString()?.Trim();  // L38
-            var f2GbPl  = ws.Cell(b2 + 13, 15).GetString()?.Trim();  // O38
-            var f3AcRev = ws.Cell(b2 + 14, 5).GetString()?.Trim();   // E39
-            var f3GbRev = ws.Cell(b2 + 14, 9).GetString()?.Trim();   // I39
-            var f3AcPl  = ws.Cell(b2 + 14, 12).GetString()?.Trim();  // L39
-            var f3GbPl  = ws.Cell(b2 + 14, 15).GetString()?.Trim();  // O39
-            var faAcRev = ws.Cell(b2 + 15, 5).GetString()?.Trim();   // E40
-            var faGbRev = ws.Cell(b2 + 15, 9).GetString()?.Trim();   // I40
-            var faAcPl  = ws.Cell(b2 + 15, 12).GetString()?.Trim();  // L40
-            var faGbPl  = ws.Cell(b2 + 15, 15).GetString()?.Trim();  // O40
+            var f1AcRev = ws.Cell(b2 + 11, 5).GetString()?.Trim(); // E36
+            var f1GbRev = ws.Cell(b2 + 11, 9).GetString()?.Trim(); // I36
+            var f1AcPl = ws.Cell(b2 + 11, 12).GetString()?.Trim(); // L36
+            var f1GbPl = ws.Cell(b2 + 11, 15).GetString()?.Trim(); // O36
+            var f2AcRev = ws.Cell(b2 + 12, 5).GetString()?.Trim(); // E37
+            var f2GbRev = ws.Cell(b2 + 12, 9).GetString()?.Trim(); // I37
+            var f2AcPl = ws.Cell(b2 + 12, 12).GetString()?.Trim(); // L37
+            var f2GbPl = ws.Cell(b2 + 12, 15).GetString()?.Trim(); // O37
+            var f3AcRev = ws.Cell(b2 + 13, 5).GetString()?.Trim(); // E38
+            var f3GbRev = ws.Cell(b2 + 13, 9).GetString()?.Trim(); // I38
+            var f3AcPl = ws.Cell(b2 + 13, 12).GetString()?.Trim(); // L38
+            var f3GbPl = ws.Cell(b2 + 13, 15).GetString()?.Trim(); // O38
+            var faAcRev = ws.Cell(b2 + 14, 5).GetString()?.Trim(); // E39
+            var faGbRev = ws.Cell(b2 + 14, 9).GetString()?.Trim(); // I39
+            var faAcPl = ws.Cell(b2 + 14, 12).GetString()?.Trim(); // L39
+            var faGbPl = ws.Cell(b2 + 14, 15).GetString()?.Trim(); // O39
 
             // ─── 2.3 해외진출 초기 특례 (b2+17 ~ b2+21) ──────────────────
             // M42=b2+17: 1.개시일, M43=b2+18: 2.준거국가, M44=b2+19: 3.유형자산,
             // M45=b2+20: 4.국가수, M46=b2+21: 5.준거국가 외 유형자산(통합 셀)
-            var initStartRaw     = ws.Cell(b2 + 17, 13).GetString()?.Trim(); // M42
-            var initRefJur       = ws.Cell(b2 + 18, 13).GetString()?.Trim(); // M43
-            var initRefAsset     = ws.Cell(b2 + 19, 13).GetString()?.Trim(); // M44
-            var initNumJur       = ws.Cell(b2 + 20, 13).GetString()?.Trim(); // M45
-            var initOtherJurRaw  = ws.Cell(b2 + 21, 13).GetString()?.Trim(); // M46 (통합 셀)
+            var initStartRaw = ws.Cell(b2 + 17, 13).GetString()?.Trim(); // M42
+            var initRefJur = ws.Cell(b2 + 18, 13).GetString()?.Trim(); // M43
+            var initRefAsset = ws.Cell(b2 + 19, 13).GetString()?.Trim(); // M44
+            var initNumJur = ws.Cell(b2 + 20, 13).GetString()?.Trim(); // M45
+            var initOtherJurRaw = ws.Cell(b2 + 21, 13).GetString()?.Trim(); // M46 (통합 셀)
 
             // ─── ETR / InitialIntActivity 데이터 유무 판단 ────────────────
-            bool hasDemini  = deminiBasis.HasValue || !string.IsNullOrEmpty(f1GbRev) || !string.IsNullOrEmpty(f1AcRev)
-                           || !string.IsNullOrEmpty(s1Rev);
-            bool hasCbcr    = !string.IsNullOrEmpty(cbcrRev) || !string.IsNullOrEmpty(cbcrPl) || !string.IsNullOrEmpty(cbcrTax);
-            bool hasUtpr    = !string.IsNullOrEmpty(utprRate);
-            bool hasEtrData              = hasDemini || hasCbcr || hasUtpr;
-            bool hasInit                 = !string.IsNullOrEmpty(initStartRaw);
-            bool hasJurWithTaxingRights  = !string.IsNullOrEmpty(taxJurRaw);
+            bool hasDemini =
+                deminiBasis.HasValue
+                || !string.IsNullOrEmpty(f1GbRev)
+                || !string.IsNullOrEmpty(f1AcRev)
+                || !string.IsNullOrEmpty(s1Rev);
+            bool hasCbcr =
+                !string.IsNullOrEmpty(cbcrRev)
+                || !string.IsNullOrEmpty(cbcrPl)
+                || !string.IsNullOrEmpty(cbcrTax);
+            bool hasUtpr = !string.IsNullOrEmpty(utprRate);
+            bool hasEtrData = hasDemini || hasCbcr || hasUtpr;
+            bool hasInit = !string.IsNullOrEmpty(initStartRaw);
+            bool hasJurWithTaxingRights = !string.IsNullOrEmpty(taxJurRaw);
 
-            if (!hasEtrData && !hasInit && !hasJurWithTaxingRights) return;
+            if (!hasEtrData && !hasInit && !hasJurWithTaxingRights)
+                return;
 
             // ─── JurisdictionSection 찾기 또는 생성 ──────────────────────
-            var js = globe.GlobeBody.JurisdictionSection
-                .FirstOrDefault(s => s.Jurisdiction == countryCode);
+            var js = globe.GlobeBody.JurisdictionSection.FirstOrDefault(s =>
+                s.Jurisdiction == countryCode
+            );
             if (js == null)
             {
                 js = new Globe.GlobeBodyTypeJurisdictionSection();
@@ -175,10 +210,16 @@ namespace GlobeMapper.Services
             // 복수 항목은 세미콜론으로 구분: "KR; JP" 또는 "KR, (GIR1101,...); JP"
             if (hasJurWithTaxingRights)
             {
-                foreach (var entry in taxJurRaw.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                foreach (
+                    var entry in taxJurRaw.Split(
+                        ';',
+                        StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries
+                    )
+                )
                 {
                     var jwr = ParseJwrEntry(entry, errors, fileName, loc);
-                    if (jwr == null) continue;
+                    if (jwr == null)
+                        continue;
                     js.JurWithTaxingRights.Add(jwr);
                 }
             }
@@ -186,10 +227,7 @@ namespace GlobeMapper.Services
             // ─── ETR 항목 생성 ────────────────────────────────────────────
             if (hasEtrData)
             {
-                var etr = new Globe.EtrType
-                {
-                    EtrStatus = new Globe.EtrTypeEtrStatus()
-                };
+                var etr = new Globe.EtrType { EtrStatus = new Globe.EtrTypeEtrStatus() };
                 var exception = new Globe.EtrTypeEtrStatusEtrException();
                 etr.EtrStatus.EtrException = exception;
 
@@ -198,46 +236,65 @@ namespace GlobeMapper.Services
                 {
                     var dmCalc = new Globe.EtrTypeEtrStatusEtrExceptionDeminimisSimplifiedNmceCalc
                     {
-                        Basis = deminiBasis ?? Globe.DeminimisSimpleBasisEnumType.Gir2901
+                        Basis = deminiBasis ?? Globe.DeminimisSimpleBasisEnumType.Gir2901,
                     };
 
-                    var periodEnd = globe.GlobeBody.FilingInfo?.Period?.End ?? new DateTime(DateTime.Today.Year, 12, 31);
+                    var periodEnd =
+                        globe.GlobeBody.FilingInfo?.Period?.End
+                        ?? new DateTime(DateTime.Today.Year, 12, 31);
 
                     // 2.2.2 상세 데이터 우선, 없으면 2.2.1.2 간소화 데이터
-                    bool useFullData = !string.IsNullOrEmpty(f1GbRev) || !string.IsNullOrEmpty(f1AcRev);
+                    bool useFullData =
+                        !string.IsNullOrEmpty(f1GbRev) || !string.IsNullOrEmpty(f1AcRev);
 
                     if (useFullData)
                     {
-                        TryAddFinancialData(dmCalc, periodEnd,              f1AcRev, f1GbRev, f1GbPl, f1AcPl);
-                        TryAddFinancialData(dmCalc, periodEnd.AddYears(-1), f2AcRev, f2GbRev, f2GbPl, f2AcPl);
-                        TryAddFinancialData(dmCalc, periodEnd.AddYears(-2), f3AcRev, f3GbRev, f3GbPl, f3AcPl);
+                        TryAddFinancialData(dmCalc, periodEnd, f1AcRev, f1GbRev, f1GbPl, f1AcPl);
+                        TryAddFinancialData(
+                            dmCalc,
+                            periodEnd.AddYears(-1),
+                            f2AcRev,
+                            f2GbRev,
+                            f2GbPl,
+                            f2AcPl
+                        );
+                        TryAddFinancialData(
+                            dmCalc,
+                            periodEnd.AddYears(-2),
+                            f3AcRev,
+                            f3GbRev,
+                            f3GbPl,
+                            f3AcPl
+                        );
 
                         if (!string.IsNullOrEmpty(faGbRev) || !string.IsNullOrEmpty(faAcRev))
                         {
-                            dmCalc.Average = new Globe.EtrTypeEtrStatusEtrExceptionDeminimisSimplifiedNmceCalcAverage
-                            {
-                                Revenue        = faAcRev,
-                                GlobeRevenue   = faGbRev ?? "",
-                                NetGlobeIncome = faGbPl  ?? "",
-                                Fanil          = faAcPl  ?? ""
-                            };
+                            dmCalc.Average =
+                                new Globe.EtrTypeEtrStatusEtrExceptionDeminimisSimplifiedNmceCalcAverage
+                                {
+                                    Revenue = faAcRev,
+                                    GlobeRevenue = faGbRev ?? "",
+                                    NetGlobeIncome = faGbPl ?? "",
+                                    Fanil = faAcPl ?? "",
+                                };
                         }
                     }
                     else
                     {
-                        TryAddSimpleFinancialData(dmCalc, periodEnd,              s1Rev, s1Tax);
+                        TryAddSimpleFinancialData(dmCalc, periodEnd, s1Rev, s1Tax);
                         TryAddSimpleFinancialData(dmCalc, periodEnd.AddYears(-1), s2Rev, s2Tax);
                         TryAddSimpleFinancialData(dmCalc, periodEnd.AddYears(-2), s3Rev, s3Tax);
 
                         if (!string.IsNullOrEmpty(saRev) || !string.IsNullOrEmpty(saTax))
                         {
-                            dmCalc.Average = new Globe.EtrTypeEtrStatusEtrExceptionDeminimisSimplifiedNmceCalcAverage
-                            {
-                                Revenue        = saRev,
-                                GlobeRevenue   = "",
-                                NetGlobeIncome = saTax ?? "",
-                                Fanil          = ""
-                            };
+                            dmCalc.Average =
+                                new Globe.EtrTypeEtrStatusEtrExceptionDeminimisSimplifiedNmceCalcAverage
+                                {
+                                    Revenue = saRev,
+                                    GlobeRevenue = "",
+                                    NetGlobeIncome = saTax ?? "",
+                                    Fanil = "",
+                                };
                         }
                     }
 
@@ -250,24 +307,29 @@ namespace GlobeMapper.Services
                     exception.TransitionalCbCrSafeHarbour =
                         new Globe.EtrTypeEtrStatusEtrExceptionTransitionalCbCrSafeHarbour
                         {
-                            Revenue   = cbcrRev,
-                            Profit    = cbcrPl ?? "",
-                            IncomeTax = cbcrTax
+                            Revenue = cbcrRev,
+                            Profit = cbcrPl ?? "",
+                            IncomeTax = cbcrTax,
                         };
                 }
 
                 // UtprSafeHarbour
                 if (hasUtpr)
                 {
-                    if (decimal.TryParse(utprRate.TrimEnd('%').Trim(),
+                    if (
+                        decimal.TryParse(
+                            utprRate.TrimEnd('%').Trim(),
                             System.Globalization.NumberStyles.Any,
                             System.Globalization.CultureInfo.InvariantCulture,
-                            out var citRate))
+                            out var citRate
+                        )
+                    )
                     {
-                        exception.UtprSafeHarbour = new Globe.EtrTypeEtrStatusEtrExceptionUtprSafeHarbour
-                        {
-                            CitRate = citRate > 1m ? citRate / 100m : citRate
-                        };
+                        exception.UtprSafeHarbour =
+                            new Globe.EtrTypeEtrStatusEtrExceptionUtprSafeHarbour
+                            {
+                                CitRate = citRate > 1m ? citRate / 100m : citRate,
+                            };
                     }
                     else
                     {
@@ -287,14 +349,17 @@ namespace GlobeMapper.Services
                 {
                     if (TryParseEnum<Globe.CountryCodeType>(initRefJur, out var refCode))
                     {
-                        init.ReferenceJurisdiction = new Globe.InitialIntActivityTypeReferenceJurisdiction
-                        {
-                            ResCountryCode     = refCode,
-                            TangibleAssetValue = initRefAsset ?? ""
-                        };
+                        init.ReferenceJurisdiction =
+                            new Globe.InitialIntActivityTypeReferenceJurisdiction
+                            {
+                                ResCountryCode = refCode,
+                                TangibleAssetValue = initRefAsset ?? "",
+                            };
                     }
                     else
-                        errors.Add($"[{fileName}] [{loc}/2.3] 준거국가 코드 파싱 실패: '{initRefJur}'");
+                        errors.Add(
+                            $"[{fileName}] [{loc}/2.3] 준거국가 코드 파싱 실패: '{initRefJur}'"
+                        );
                 }
 
                 if (!string.IsNullOrEmpty(initNumJur))
@@ -304,7 +369,14 @@ namespace GlobeMapper.Services
                 // 포맷: "국가코드(ISO2),유형자산값" × N, 국가 간 ';' 구분
                 // 예: "KR, 100000000; US, 50000000"
                 if (!string.IsNullOrEmpty(initOtherJurRaw))
-                    ParseOtherJurisdictionsCell(initOtherJurRaw, init, b2 + 21, errors, fileName, loc);
+                    ParseOtherJurisdictionsCell(
+                        initOtherJurRaw,
+                        init,
+                        b2 + 21,
+                        errors,
+                        fileName,
+                        loc
+                    );
 
                 js.GLoBeTax.InitialIntActivity = init;
             }
@@ -315,11 +387,18 @@ namespace GlobeMapper.Services
         /// "국가,값; 국가,값" → OtherJurisdiction[]
         /// </summary>
         private void ParseOtherJurisdictionsCell(
-            string cellValue, Globe.InitialIntActivityType init, int row,
-            List<string> errors, string fileName, string loc)
+            string cellValue,
+            Globe.InitialIntActivityType init,
+            int row,
+            List<string> errors,
+            string fileName,
+            string loc
+        )
         {
             var entries = cellValue.Split(
-                ';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                ';',
+                StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries
+            );
 
             for (int i = 0; i < entries.Length; i++)
             {
@@ -332,13 +411,15 @@ namespace GlobeMapper.Services
 
                 if (!TryParseEnum<Globe.CountryCodeType>(countryRaw, out var otherCode))
                 {
-                    errors.Add($"[{fileName}] [{loc}/2.3/외국{i + 1}] 국가코드 파싱 실패: '{countryRaw}' (M{row})");
+                    errors.Add(
+                        $"[{fileName}] [{loc}/2.3/외국{i + 1}] 국가코드 파싱 실패: '{countryRaw}' (M{row})"
+                    );
                     continue;
                 }
 
                 var other = new Globe.InitialIntActivityTypeOtherJurisdiction
                 {
-                    TangibleAssetValue = assetValue
+                    TangibleAssetValue = assetValue,
                 };
                 other.ResCountryCode.Add(otherCode);
                 init.OtherJurisdiction.Add(other);
@@ -350,7 +431,11 @@ namespace GlobeMapper.Services
         /// 예: "KR, (GIR1101, 123456790, GIR3001, KR)" 또는 "KR"
         /// </summary>
         private Globe.JurisdictionSectionTypeJurWithTaxingRights ParseJwrEntry(
-            string entry, List<string> errors, string fileName, string loc)
+            string entry,
+            List<string> errors,
+            string fileName,
+            string loc
+        )
         {
             string countryPart;
             string subgroupPart = null;
@@ -359,7 +444,9 @@ namespace GlobeMapper.Services
             var parenIdx = entry.IndexOf('(');
             if (parenIdx < 0 && entry.Contains(','))
             {
-                errors.Add($"[{fileName}] [{loc}] 과세권 국가 형식 오류: '{entry}' — 복수 항목은 세미콜론(;)으로 구분하세요. 예) KR; JP");
+                errors.Add(
+                    $"[{fileName}] [{loc}] 과세권 국가 형식 오류: '{entry}' — 복수 항목은 세미콜론(;)으로 구분하세요. 예) KR; JP"
+                );
                 return null;
             }
 
@@ -383,7 +470,7 @@ namespace GlobeMapper.Services
 
             var jwr = new Globe.JurisdictionSectionTypeJurWithTaxingRights
             {
-                JurisdictionName = countryCode
+                JurisdictionName = countryCode,
             };
 
             if (!string.IsNullOrEmpty(subgroupPart))
@@ -392,22 +479,33 @@ namespace GlobeMapper.Services
                 var subgroup = new Globe.JurisdictionSectionTypeJurWithTaxingRightsSubgroup();
 
                 if (parts.Length >= 1 && !string.IsNullOrEmpty(parts[0]))
-                    SetEnum<Globe.TypeofSubGroupEnumType>(parts[0], v => subgroup.TypeofSubGroup.Add(v),
-                        errors, fileName, new MappingEntry { Label = $"[{loc}] 과세권/하위그룹유형" });
+                    SetEnum<Globe.TypeofSubGroupEnumType>(
+                        parts[0],
+                        v => subgroup.TypeofSubGroup.Add(v),
+                        errors,
+                        fileName,
+                        new MappingEntry { Label = $"[{loc}] 과세권/하위그룹유형" }
+                    );
 
-                var tinVal     = parts.Length >= 2 ? parts[1] : null;
+                var tinVal = parts.Length >= 2 ? parts[1] : null;
                 var tinTypeStr = parts.Length >= 3 ? parts[2] : null;
-                var issuedBy   = parts.Length >= 4 ? parts[3] : null;
+                var issuedBy = parts.Length >= 4 ? parts[3] : null;
 
                 if (!string.IsNullOrEmpty(tinVal))
                 {
                     var tin = new Globe.TinType { Value = tinVal };
-                    if (!string.IsNullOrEmpty(tinTypeStr) && TryParseEnum<Globe.TinEnumType>(tinTypeStr, out var tinEnum))
+                    if (
+                        !string.IsNullOrEmpty(tinTypeStr)
+                        && TryParseEnum<Globe.TinEnumType>(tinTypeStr, out var tinEnum)
+                    )
                     {
                         tin.TypeOfTin = tinEnum;
                         tin.TypeOfTinSpecified = true;
                     }
-                    if (!string.IsNullOrEmpty(issuedBy) && TryParseEnum<Globe.CountryCodeType>(issuedBy, out var issuedByCode))
+                    if (
+                        !string.IsNullOrEmpty(issuedBy)
+                        && TryParseEnum<Globe.CountryCodeType>(issuedBy, out var issuedByCode)
+                    )
                     {
                         tin.IssuedBy = issuedByCode;
                         tin.IssuedBySpecified = true;
@@ -430,44 +528,61 @@ namespace GlobeMapper.Services
             for (int col = 2; col <= 6; col++)
             {
                 var val = ws.Cell(row, col).GetString();
-                if (val?.Contains(text) == true) return true;
+                if (val?.Contains(text) == true)
+                    return true;
             }
             return false;
         }
 
         private static void TryAddFinancialData(
             Globe.EtrTypeEtrStatusEtrExceptionDeminimisSimplifiedNmceCalc dmCalc,
-            DateTime year, string revenue, string globeRevenue, string netGlobeIncome, string fanil)
+            DateTime year,
+            string revenue,
+            string globeRevenue,
+            string netGlobeIncome,
+            string fanil
+        )
         {
-            if (string.IsNullOrEmpty(globeRevenue) && string.IsNullOrEmpty(revenue)
-                && string.IsNullOrEmpty(netGlobeIncome) && string.IsNullOrEmpty(fanil)) return;
+            if (
+                string.IsNullOrEmpty(globeRevenue)
+                && string.IsNullOrEmpty(revenue)
+                && string.IsNullOrEmpty(netGlobeIncome)
+                && string.IsNullOrEmpty(fanil)
+            )
+                return;
 
             dmCalc.FinancialData.Add(
                 new Globe.EtrTypeEtrStatusEtrExceptionDeminimisSimplifiedNmceCalcFinancialData
                 {
-                    Year           = year,
-                    Revenue        = revenue,
-                    GlobeRevenue   = globeRevenue   ?? "",
+                    Year = year,
+                    Revenue = revenue,
+                    GlobeRevenue = globeRevenue ?? "",
                     NetGlobeIncome = netGlobeIncome ?? "",
-                    Fanil          = fanil          ?? ""
-                });
+                    Fanil = fanil ?? "",
+                }
+            );
         }
 
         private static void TryAddSimpleFinancialData(
             Globe.EtrTypeEtrStatusEtrExceptionDeminimisSimplifiedNmceCalc dmCalc,
-            DateTime year, string revenue, string simplifiedTax)
+            DateTime year,
+            string revenue,
+            string simplifiedTax
+        )
         {
-            if (string.IsNullOrEmpty(revenue) && string.IsNullOrEmpty(simplifiedTax)) return;
+            if (string.IsNullOrEmpty(revenue) && string.IsNullOrEmpty(simplifiedTax))
+                return;
 
             dmCalc.FinancialData.Add(
                 new Globe.EtrTypeEtrStatusEtrExceptionDeminimisSimplifiedNmceCalcFinancialData
                 {
-                    Year           = year,
-                    Revenue        = revenue,
-                    GlobeRevenue   = "",
+                    Year = year,
+                    Revenue = revenue,
+                    GlobeRevenue = "",
                     NetGlobeIncome = simplifiedTax ?? "",
-                    Fanil          = ""
-                });
+                    Fanil = "",
+                }
+            );
         }
     }
 }

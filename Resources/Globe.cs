@@ -8018,7 +8018,7 @@ namespace Globe
         
         [System.Xml.Serialization.XmlIgnoreAttribute()]
         private System.Collections.ObjectModel.Collection<IdGlobeStatusEnumType> _preGlobeStatus;
-        
+
         /// <summary>
         /// <para>Enumeration #7</para>
         /// </summary>
@@ -8036,7 +8036,7 @@ namespace Globe
                 _preGlobeStatus = value;
             }
         }
-        
+
         /// <summary>
         /// <para xml:lang="en">Initializes a new instance of the <see cref="CorporateStructureTypeCeOwnershipChange" /> class.</para>
         /// </summary>
@@ -8863,7 +8863,7 @@ namespace Globe
         
         [System.Xml.Serialization.XmlIgnoreAttribute()]
         private System.Collections.ObjectModel.Collection<TypeofSubGroupEnumType> _typeofSubGroup;
-        
+
         /// <summary>
         /// <para>Enumeration #11</para>
         /// </summary>
@@ -8881,7 +8881,7 @@ namespace Globe
                 _typeofSubGroup = value;
             }
         }
-        
+
         /// <summary>
         /// <para xml:lang="en">Initializes a new instance of the <see cref="JurisdictionSectionTypeJurWithTaxingRightsSubgroup" /> class.</para>
         /// </summary>

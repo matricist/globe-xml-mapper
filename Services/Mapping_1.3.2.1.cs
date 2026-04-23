@@ -28,15 +28,15 @@ namespace GlobeMapper.Services
             (6, "Ce.Id.ReceivingTin"),
             (7, "Ce.Id.GlobeStatus"),
             (12, "Ce.Qiir.PopeIpe"),
-            (13, "Ce.Qiir.Exception.Art213.Tin"),  // O16: Art2.1.3 해당 모기업 TIN
-            (14, "Ce.Qiir.Exception.Art215.Tin"),  // O17: Art2.1.5 해당 부분소유모기업 TIN
+            (13, "Ce.Qiir.Exception.Art213.Tin"), // O16: Art2.1.3 해당 모기업 TIN
+            (14, "Ce.Qiir.Exception.Art215.Tin"), // O17: Art2.1.5 해당 부분소유모기업 TIN
             (15, "Ce.Qutpr.Art93"),
             (16, "Ce.Qutpr.AggOwnership"),
             (17, "Ce.Qutpr.UpeOwnership"),
         };
 
         public Mapping_1_3_2_1()
-            : base("mapping_1.3.2.1.json") { }
+            : base(null) { }
 
         public override void Map(
             IXLWorksheet ws,
@@ -134,7 +134,8 @@ namespace GlobeMapper.Services
                 case "Ce.Id.Name":
                     var (ceName, ceKName) = ParseNameKName(val);
                     ce.Id.Name = ceName;
-                    if (ceKName != null) ce.Id.KName = ceKName;
+                    if (ceKName != null)
+                        ce.Id.KName = ceKName;
                     break;
                 case "Ce.Id.Tin.Value":
                     ce.Id.Tin.Add(ParseTin(val));
@@ -165,7 +166,8 @@ namespace GlobeMapper.Services
                     // Art2.1.3: 최종모기업/중간모기업에 QIIR 적용 시 해당 모기업 TIN
                     ce.Qiir ??= new Globe.CorporateStructureTypeCeQiir();
                     ce.Qiir.Exception ??= new Globe.CorporateStructureTypeCeQiirException();
-                    ce.Qiir.Exception.ExceptionRule ??= new Globe.CorporateStructureTypeCeQiirExceptionExceptionRule();
+                    ce.Qiir.Exception.ExceptionRule ??=
+                        new Globe.CorporateStructureTypeCeQiirExceptionExceptionRule();
                     ce.Qiir.Exception.ExceptionRule.Art213 = true;
                     ce.Qiir.Exception.ExceptionRule.Art213Specified = true;
                     ce.Qiir.Exception.Tin = ParseTin(val);
@@ -174,7 +176,8 @@ namespace GlobeMapper.Services
                     // Art2.1.5: 부분소유모기업에 QIIR 적용 시 해당 모기업 TIN
                     ce.Qiir ??= new Globe.CorporateStructureTypeCeQiir();
                     ce.Qiir.Exception ??= new Globe.CorporateStructureTypeCeQiirException();
-                    ce.Qiir.Exception.ExceptionRule ??= new Globe.CorporateStructureTypeCeQiirExceptionExceptionRule();
+                    ce.Qiir.Exception.ExceptionRule ??=
+                        new Globe.CorporateStructureTypeCeQiirExceptionExceptionRule();
                     ce.Qiir.Exception.ExceptionRule.Art215 = true;
                     ce.Qiir.Exception.ExceptionRule.Art215Specified = true;
                     ce.Qiir.Exception.Tin = ParseTin(val);
@@ -185,10 +188,14 @@ namespace GlobeMapper.Services
                     break;
                 case "Ce.Qutpr.AggOwnership":
                     ce.Qutpr ??= new Globe.CorporateStructureTypeCeQutpr();
-                    if (decimal.TryParse(val.TrimEnd('%').Trim(),
-                        System.Globalization.NumberStyles.Any,
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        out var agg))
+                    if (
+                        decimal.TryParse(
+                            val.TrimEnd('%').Trim(),
+                            System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            out var agg
+                        )
+                    )
                     {
                         ce.Qutpr.AggOwnership = agg > 1m ? agg / 100m : agg;
                         ce.Qutpr.AggOwnershipSpecified = true;
@@ -222,20 +229,13 @@ namespace GlobeMapper.Services
 
             for (int i = 0; i < shareholders.Length; i++)
             {
-                var parts = shareholders[i].Split(
-                    ',',
-                    System.StringSplitOptions.TrimEntries
-                );
+                var parts = shareholders[i].Split(',', System.StringSplitOptions.TrimEntries);
 
                 if (parts.Length == 0 || parts.All(string.IsNullOrEmpty))
                     continue;
 
                 var ownership = new Globe.CorporateStructureTypeCeOwnership();
-                var entry = new MappingEntry
-                {
-                    Cell = $"O{row}",
-                    Label = $"소유지분[{i + 1}]",
-                };
+                var entry = new MappingEntry { Cell = $"O{row}", Label = $"소유지분[{i + 1}]" };
 
                 // [0] 유형 (GIR801~806)
                 if (parts.Length >= 1 && !string.IsNullOrEmpty(parts[0]))
@@ -252,14 +252,20 @@ namespace GlobeMapper.Services
                 if (!string.IsNullOrEmpty(tinValue))
                 {
                     var tin = new Globe.TinType { Value = tinValue };
-                    if (parts.Length >= 3 && !string.IsNullOrEmpty(parts[2])
-                        && TryParseEnum<Globe.TinEnumType>(parts[2], out var tinType))
+                    if (
+                        parts.Length >= 3
+                        && !string.IsNullOrEmpty(parts[2])
+                        && TryParseEnum<Globe.TinEnumType>(parts[2], out var tinType)
+                    )
                     {
                         tin.TypeOfTin = tinType;
                         tin.TypeOfTinSpecified = true;
                     }
-                    if (parts.Length >= 4 && !string.IsNullOrEmpty(parts[3])
-                        && TryParseEnum<Globe.CountryCodeType>(parts[3], out var country))
+                    if (
+                        parts.Length >= 4
+                        && !string.IsNullOrEmpty(parts[3])
+                        && TryParseEnum<Globe.CountryCodeType>(parts[3], out var country)
+                    )
                     {
                         tin.IssuedBy = country;
                         tin.IssuedBySpecified = true;
@@ -275,10 +281,14 @@ namespace GlobeMapper.Services
                 if (parts.Length >= 5 && !string.IsNullOrEmpty(parts[4]))
                 {
                     var pctClean = parts[4].TrimEnd('%').Trim();
-                    if (decimal.TryParse(pctClean,
-                        System.Globalization.NumberStyles.Any,
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        out var pct))
+                    if (
+                        decimal.TryParse(
+                            pctClean,
+                            System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            out var pct
+                        )
+                    )
                     {
                         ownership.OwnershipPercentage = pct > 1m ? pct / 100m : pct;
                     }

@@ -1,11 +1,58 @@
-{
-  "description": "글로벌최저한세 정보 요약 (Summary)",
+﻿{
+  "description": "요약",
   "sheetName": "요약",
-  "repeatable": false,
+  "sourceFile": "Mapping_1.4.cs",
+  "note": "자동 생성 (GenerateMappingDocs). 개발자 참조용 — 실제 로드 안 됨.",
   "sections": {
-    "1.4": {
-      "description": "정보 요약 테이블 — 행 반복, blockCount 기반",
-      "mappings": []
+    "rows": {
+      "description": "행 반복: 행 4부터 EOF까지 각 행에서 여러 열 읽음",
+      "mappings": [
+        {
+          "cell": "B4",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "C4",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "E4",
+          "target": "sg.Tin",
+          "type": "tin"
+        },
+        {
+          "cell": "G4",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "I4",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "K4",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "M4",
+          "target": "SummaryTypeSbie.NoTut",
+          "type": "string"
+        },
+        {
+          "cell": "O4",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "Q4",
+          "target": "(unresolved)",
+          "type": "string"
+        }
+      ]
     }
   }
 }

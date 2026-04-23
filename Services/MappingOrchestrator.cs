@@ -9,15 +9,15 @@ namespace GlobeMapper.Services
         // 섹션키 → 매퍼 생성 팩토리
         private static readonly Dictionary<string, Func<MappingBase>> MapperFactory = new()
         {
-            { "1.1~1.2",  () => new Mapping_1_1_1_2() },
-            { "1.3.1",    () => new Mapping_1_3_1() },
-            { "1.3.2.1",  () => new Mapping_1_3_2_1() },
-            { "1.3.2.2",  () => new Mapping_1_3_2_2() },
-            { "1.3.3",    () => new Mapping_1_3_3() },
-            { "1.4",      () => new Mapping_1_4() },
-            { "2",        () => new Mapping_2() },
-            { "UTPR",     () => new Mapping_Utpr() },
-            { "JurCal",   () => new Mapping_JurCal() },
+            { "1.1~1.2", () => new Mapping_1_1_1_2() },
+            { "1.3.1", () => new Mapping_1_3_1() },
+            { "1.3.2.1", () => new Mapping_1_3_2_1() },
+            { "1.3.2.2", () => new Mapping_1_3_2_2() },
+            { "1.3.3", () => new Mapping_1_3_3() },
+            { "1.4", () => new Mapping_1_4() },
+            { "2", () => new Mapping_2() },
+            { "UTPR", () => new Mapping_Utpr() },
+            { "JurCal", () => new Mapping_JurCal() },
             { "EntityCe", () => new Mapping_EntityCe() },
         };
 
@@ -31,7 +31,7 @@ namespace GlobeMapper.Services
 
             using var workbook = new XLWorkbook(filePath);
 
-            foreach (var (section, sheetName) in ExcelController.SheetMap)
+            foreach (var (section, sheetName) in TemplateMeta.SheetMap)
             {
                 if (!MapperFactory.TryGetValue(section, out var createMapper))
                     continue; // 매퍼 없는 섹션은 스킵 (1.3.3 등 XML 미포함)
@@ -55,7 +55,11 @@ namespace GlobeMapper.Services
             var fi = globe.GlobeBody?.FilingInfo;
 
             if (fi?.FilingCe != null)
+            {
                 spec.TransmittingCountry = fi.FilingCe.ResCountryCode;
+                if (!string.IsNullOrWhiteSpace(fi.FilingCe.Tin?.Value))
+                    spec.SendingEntityIn = fi.FilingCe.Tin.Value;
+            }
 
             spec.ReceivingCountry = spec.TransmittingCountry;
             spec.MessageType = Globe.MessageTypeEnumType.Gir;
@@ -87,7 +91,7 @@ namespace GlobeMapper.Services
                 globe.GlobeBody.FilingInfo.DocSpec = new Globe.DocSpecType
                 {
                     DocTypeIndic = Globe.OecdDocTypeIndicEnumType.Oecd1,
-                    DocRefId = $"{sendCC}{year}FI{ts}"
+                    DocRefId = $"{sendCC}{year}FI{ts}",
                 };
             }
 
@@ -96,7 +100,7 @@ namespace GlobeMapper.Services
                 globe.GlobeBody.GeneralSection.DocSpec = new Globe.DocSpecType
                 {
                     DocTypeIndic = Globe.OecdDocTypeIndicEnumType.Oecd1,
-                    DocRefId = $"{sendCC}{year}GS{ts}"
+                    DocRefId = $"{sendCC}{year}GS{ts}",
                 };
             }
 
@@ -106,7 +110,27 @@ namespace GlobeMapper.Services
                 ua.DocSpec = new Globe.DocSpecType
                 {
                     DocTypeIndic = Globe.OecdDocTypeIndicEnumType.Oecd1,
-                    DocRefId = $"{sendCC}{year}UA{utprIdx++}{ts}"
+                    DocRefId = $"{sendCC}{year}UA{utprIdx++}{ts}",
+                };
+            }
+
+            int jsIdx = 0;
+            foreach (var js in globe.GlobeBody.JurisdictionSection)
+            {
+                js.DocSpec = new Globe.DocSpecType
+                {
+                    DocTypeIndic = Globe.OecdDocTypeIndicEnumType.Oecd1,
+                    DocRefId = $"{sendCC}{year}JS{jsIdx++}{ts}",
+                };
+            }
+
+            int sumIdx = 0;
+            foreach (var sm in globe.GlobeBody.Summary)
+            {
+                sm.DocSpec = new Globe.DocSpecType
+                {
+                    DocTypeIndic = Globe.OecdDocTypeIndicEnumType.Oecd1,
+                    DocRefId = $"{sendCC}{year}SM{sumIdx++}{ts}",
                 };
             }
         }

@@ -1,15 +1,30 @@
-{
-  "description": "제외기업 정보",
+﻿{
+  "description": "제외기업",
   "sheetName": "제외기업",
-  "repeatable": true,
-  "collectionTarget": "ExcludedEntity",
+  "sourceFile": "Mapping_1.3.2.2.cs",
+  "note": "자동 생성 (GenerateMappingDocs). 개발자 참조용 — 실제 로드 안 됨.",
   "sections": {
-    "제외기업": {
-      "description": "제외기업 기본 정보",
+    "FieldMap": {
+      "description": "블록 반복 (BLOCK_START=2, 입력 열 = O)",
       "mappings": [
-        { "cell": "O3", "target": "ExcludedEntity.Change",  "type": "bool",                        "label": "1. 변동 여부" },
-        { "cell": "O4", "target": "ExcludedEntity.Name",    "type": "string",                      "label": "2. 제외기업 상호" },
-        { "cell": "O5", "target": "ExcludedEntity.Type",    "type": "enum:ExcludedEntityEnumType",  "label": "3. 제외기업 유형" }
+        {
+          "cell": "O3",
+          "target": "Change",
+          "type": "string",
+          "label": "1. 직전 신고대상 사업연도 대비 변동 여부"
+        },
+        {
+          "cell": "O4",
+          "target": "Name",
+          "type": "string",
+          "label": "2. 제외기업 상호"
+        },
+        {
+          "cell": "O5",
+          "target": "Type",
+          "type": "string",
+          "label": "3. 제외기업 유형"
+        }
       ]
     }
   }

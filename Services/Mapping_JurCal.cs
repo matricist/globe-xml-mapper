@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using ClosedXML.Excel;
@@ -120,7 +120,8 @@ namespace GlobeMapper.Services
         {
             // 세로 스택된 "3.1 국가별" 블록을 모두 찾아 각각 처리
             var blockStarts = FindAllBlockStarts(ws);
-            if (blockStarts.Count == 0) return;
+            if (blockStarts.Count == 0)
+                return;
 
             var lastUsedRow = ws.LastRowUsed()?.RowNumber() ?? 300;
             for (int i = 0; i < blockStarts.Count; i++)
@@ -156,8 +157,12 @@ namespace GlobeMapper.Services
         // fromRow/toRow 생략 시 현재 블록 범위(_blockStart, _blockEnd) 사용.
         private int FindRow(IXLWorksheet ws, string contains, int fromRow = 0, int toRow = 0)
         {
-            if (fromRow <= 0) fromRow = _blockStart;
-            int end = toRow > 0 ? toRow : (_blockEnd > 0 ? _blockEnd : ws.LastRowUsed()?.RowNumber() ?? 300);
+            if (fromRow <= 0)
+                fromRow = _blockStart;
+            int end =
+                toRow > 0
+                    ? toRow
+                    : (_blockEnd > 0 ? _blockEnd : ws.LastRowUsed()?.RowNumber() ?? 300);
             for (int r = fromRow; r <= end; r++)
             {
                 var txt = ws.Cell(r, 2).GetString()?.Trim() ?? "";
@@ -179,7 +184,7 @@ namespace GlobeMapper.Services
             if (row31 < 0)
                 return;
 
-            var jurRaw = ws.Cell(row31 + 1, 15).GetString()?.Trim(); // O: +1 국가명
+            var jurRaw = ws.Cell(row31 + 1, 15).GetString()?.Trim(); // O: +1 국가명 (O5)
             if (string.IsNullOrEmpty(jurRaw))
                 return;
 
@@ -213,8 +218,8 @@ namespace GlobeMapper.Services
             }
 
             // O: +2 하위그룹유형, +3 TIN
-            var subGroupTypeRaw = ws.Cell(row31 + 2, 15).GetString()?.Trim();
-            var subGroupTinRaw = ws.Cell(row31 + 3, 15).GetString()?.Trim();
+            var subGroupTypeRaw = ws.Cell(row31 + 2, 15).GetString()?.Trim(); // O6
+            var subGroupTinRaw = ws.Cell(row31 + 3, 15).GetString()?.Trim(); // O7
             if (!string.IsNullOrEmpty(subGroupTypeRaw) || !string.IsNullOrEmpty(subGroupTinRaw))
             {
                 var subGroup = new Globe.EtrTypeSubGroup();
@@ -279,15 +284,15 @@ namespace GlobeMapper.Services
             // +0: 3.2.1.2 헤더, +1: (a)소계헤더, +2: AggregrateCurrentTax,
             // +3: "2.조정사항" 서브헤더, +4~+23: (a)~(t) 20개, +24: Total
             var row3212 = FindRow(ws, "3.2.1.2");
-            var aggTaxRaw = row3212 >= 0 ? ws.Cell(row3212 + 2, 15).GetString()?.Trim() : null; // O+2: AggregrateCurrentTax
-            var adjTaxRaw = row3212 >= 0 ? ws.Cell(row3212 + 24, 15).GetString()?.Trim() : null; // O+24: Total
+            var aggTaxRaw = row3212 >= 0 ? ws.Cell(row3212 + 2, 15).GetString()?.Trim() : null; // O+2: AggregrateCurrentTax (O62)
+            var adjTaxRaw = row3212 >= 0 ? ws.Cell(row3212 + 24, 15).GetString()?.Trim() : null; // O+24: Total (O84)
 
             // ── (b) 이월조정대상조세 헤더 ─────────────────────────────────────
             var rowExcess = FindRow(ws, "(b) 이월조정대상조세");
-            var exPriorRaw = rowExcess >= 0 ? ws.Cell(rowExcess + 1, 15).GetString()?.Trim() : null;
-            var exGenRaw = rowExcess >= 0 ? ws.Cell(rowExcess + 2, 15).GetString()?.Trim() : null;
-            var exUtilRaw = rowExcess >= 0 ? ws.Cell(rowExcess + 3, 15).GetString()?.Trim() : null;
-            var exRemRaw = rowExcess >= 0 ? ws.Cell(rowExcess + 4, 15).GetString()?.Trim() : null;
+            var exPriorRaw = rowExcess >= 0 ? ws.Cell(rowExcess + 1, 15).GetString()?.Trim() : null; // O87
+            var exGenRaw = rowExcess >= 0 ? ws.Cell(rowExcess + 2, 15).GetString()?.Trim() : null; // O88
+            var exUtilRaw = rowExcess >= 0 ? ws.Cell(rowExcess + 3, 15).GetString()?.Trim() : null; // O89
+            var exRemRaw = rowExcess >= 0 ? ws.Cell(rowExcess + 4, 15).GetString()?.Trim() : null; // O90
 
             bool hasData =
                 !string.IsNullOrEmpty(fanilRaw)
@@ -412,6 +417,23 @@ namespace GlobeMapper.Services
                             }
                         );
                     }
+
+                    // TransBlendCfc.Total [R] = ΣAllocation.AggAllocTax (decimal 합계)
+                    if (overall.AdjustedCoveredTax.TransBlendCfc != null)
+                    {
+                        decimal sum = 0m;
+                        foreach (var cj in overall.AdjustedCoveredTax.TransBlendCfc.CfcJur)
+                        {
+                            if (decimal.TryParse(
+                                    cj.Allocation?.AggAllocTax,
+                                    System.Globalization.NumberStyles.Any,
+                                    System.Globalization.CultureInfo.InvariantCulture,
+                                    out var v))
+                                sum += v;
+                        }
+                        overall.AdjustedCoveredTax.TransBlendCfc.Total =
+                            sum.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    }
                 }
             }
 
@@ -478,12 +500,12 @@ namespace GlobeMapper.Services
             //  +7: "이 연 법 인 세 자 산" 그룹헤더
             //  +8: [B="3."] [F="4."] [K="5."] [O="6."] 컬럼헤더
             //  +9: 데이터행 — B=DTAStart, F=DTARecast, K=DTAExcl, O=DTATotal
-            var dtlStartRaw = ws.Cell(rowHeader + 5, 2).GetString()?.Trim(); // 1. B열
-            var dtlRecastRaw = ws.Cell(rowHeader + 5, 11).GetString()?.Trim(); // 2. K열
-            var dtaStartRaw = ws.Cell(rowHeader + 9, 2).GetString()?.Trim(); // 3. B열
-            var dtaRecastRaw = ws.Cell(rowHeader + 9, 6).GetString()?.Trim(); // 4. F열
-            var dtaExclRaw = ws.Cell(rowHeader + 9, 11).GetString()?.Trim(); // 5. K열
-            var dtaTotalRaw = ws.Cell(rowHeader + 9, 15).GetString()?.Trim(); // 6. O열
+            var dtlStartRaw = ws.Cell(rowHeader + 5, 2).GetString()?.Trim(); // 1. B열 (B155)
+            var dtlRecastRaw = ws.Cell(rowHeader + 5, 11).GetString()?.Trim(); // 2. K열 (K155)
+            var dtaStartRaw = ws.Cell(rowHeader + 9, 2).GetString()?.Trim(); // 3. B열 (B159)
+            var dtaRecastRaw = ws.Cell(rowHeader + 9, 6).GetString()?.Trim(); // 4. F열 (F159)
+            var dtaExclRaw = ws.Cell(rowHeader + 9, 11).GetString()?.Trim(); // 5. K열 (K159)
+            var dtaTotalRaw = ws.Cell(rowHeader + 9, 15).GetString()?.Trim(); // 6. O열 (O159)
 
             // (b) 처분기업 명세 — "(b)" 서브헤더부터 B열 비면 종료
             var rowDisposal = FindRow(ws, "(b)", rowHeader);
@@ -552,7 +574,7 @@ namespace GlobeMapper.Services
             var dt = overall.AdjustedCoveredTax.DeferTaxAdjustAmt;
 
             // Year: +1행 O열 (최초적용연도 사업연도 개시일)
-            var yearRaw = ws.Cell(rowHeader + 1, 15).GetString()?.Trim();
+            var yearRaw = ws.Cell(rowHeader + 1, 15).GetString()?.Trim(); // O151
             DateTime? year = null;
             if (!string.IsNullOrEmpty(yearRaw))
             {
@@ -720,9 +742,9 @@ namespace GlobeMapper.Services
             if (rowA < 0)
                 return;
 
-            var dtlMinus5Raw = ws.Cell(rowA + 1, 15).GetString()?.Trim(); // 1. DTLRFYMinus5
-            var recapMinus5Raw = ws.Cell(rowA + 2, 15).GetString()?.Trim(); // 2. RecapDTLRFYMinus5
-            var dtlRfyRaw = ws.Cell(rowA + 3, 15).GetString()?.Trim(); // 3. DTLRFY
+            var dtlMinus5Raw = ws.Cell(rowA + 1, 15).GetString()?.Trim(); // 1. DTLRFYMinus5 (O141)
+            var recapMinus5Raw = ws.Cell(rowA + 2, 15).GetString()?.Trim(); // 2. RecapDTLRFYMinus5 (O142)
+            var dtlRfyRaw = ws.Cell(rowA + 3, 15).GetString()?.Trim(); // 3. DTLRFY (O143)
 
             // (b) 헤더: J=신고대상(10), N=직전(14), +2=a, +3=b, +4=c
             var rowB = FindRow(ws, "(b) 총 이연법인세부채 환입", rowA);
@@ -734,12 +756,12 @@ namespace GlobeMapper.Services
                 priorUnjust = null;
             if (rowB >= 0)
             {
-                rfyPreTrans = ws.Cell(rowB + 2, 10).GetString()?.Trim();
-                priorPreTrans = ws.Cell(rowB + 2, 14).GetString()?.Trim();
-                rfyOutBal = ws.Cell(rowB + 3, 10).GetString()?.Trim();
-                priorOutBal = ws.Cell(rowB + 3, 14).GetString()?.Trim();
-                rfyUnjust = ws.Cell(rowB + 4, 10).GetString()?.Trim();
-                priorUnjust = ws.Cell(rowB + 4, 14).GetString()?.Trim();
+                rfyPreTrans = ws.Cell(rowB + 2, 10).GetString()?.Trim(); // J146
+                priorPreTrans = ws.Cell(rowB + 2, 14).GetString()?.Trim(); // N146
+                rfyOutBal = ws.Cell(rowB + 3, 10).GetString()?.Trim(); // J147
+                priorOutBal = ws.Cell(rowB + 3, 14).GetString()?.Trim(); // N147
+                rfyUnjust = ws.Cell(rowB + 4, 10).GetString()?.Trim(); // J148
+                priorUnjust = ws.Cell(rowB + 4, 14).GetString()?.Trim(); // N148
             }
 
             bool hasData =
@@ -856,15 +878,15 @@ namespace GlobeMapper.Services
             if (rowSummary < 0)
                 return;
 
-            var defTaxRaw = ws.Cell(rowSummary + 1, 15).GetString()?.Trim(); // a
-            var diffCarryRaw = ws.Cell(rowSummary + 2, 15).GetString()?.Trim(); // b
-            var globeValRaw = ws.Cell(rowSummary + 3, 15).GetString()?.Trim(); // c
-            var befRecastRaw = ws.Cell(rowSummary + 4, 15).GetString()?.Trim(); // d
-            var totalAdjRaw = ws.Cell(rowSummary + 5, 15).GetString()?.Trim(); // 2. 총조정금액
-            var preRecastRaw = ws.Cell(rowSummary + 6, 15).GetString()?.Trim(); // e
-            var recastLoRaw = ws.Cell(rowSummary + 7, 15).GetString()?.Trim(); // f (낮은)
-            var recastHiRaw = ws.Cell(rowSummary + 8, 15).GetString()?.Trim(); // g (높은)
-            var totalRaw = ws.Cell(rowSummary + 9, 15).GetString()?.Trim(); // 4. 총이연법인세조정금액
+            var defTaxRaw = ws.Cell(rowSummary + 1, 15).GetString()?.Trim(); // a (O101)
+            var diffCarryRaw = ws.Cell(rowSummary + 2, 15).GetString()?.Trim(); // b (O102)
+            var globeValRaw = ws.Cell(rowSummary + 3, 15).GetString()?.Trim(); // c (O103)
+            var befRecastRaw = ws.Cell(rowSummary + 4, 15).GetString()?.Trim(); // d (O104)
+            var totalAdjRaw = ws.Cell(rowSummary + 5, 15).GetString()?.Trim(); // 2. 총조정금액 (O105)
+            var preRecastRaw = ws.Cell(rowSummary + 6, 15).GetString()?.Trim(); // e (O106)
+            var recastLoRaw = ws.Cell(rowSummary + 7, 15).GetString()?.Trim(); // f (낮은) (O107)
+            var recastHiRaw = ws.Cell(rowSummary + 8, 15).GetString()?.Trim(); // g (높은) (O108)
+            var totalRaw = ws.Cell(rowSummary + 9, 15).GetString()?.Trim(); // 4. 총이연법인세조정금액 (O109)
 
             // (b) 조정내역 헤더 탐색 → GIR2501~GIR2516 순서로 16개
             var rowDetail = FindRow(ws, "(b) 조정내역");
@@ -964,8 +986,10 @@ namespace GlobeMapper.Services
         {
             // 3.2.3.1 섹션 헤더 이후부터 검색 (블록 앞쪽 조정사항과 키워드 충돌 방지)
             int rSec = FindRow(ws, "3.2.3.1");
-            if (rSec < 0) rSec = FindRow(ws, "3.2.3");
-            if (rSec < 0) return;
+            if (rSec < 0)
+                rSec = FindRow(ws, "3.2.3");
+            if (rSec < 0)
+                return;
 
             // 헬퍼: B열에서 헤더 찾고 M열 값 반환
             DateTime? ParseYear(string raw, string label)
@@ -1011,7 +1035,7 @@ namespace GlobeMapper.Services
             // ── 매년 선택 ──────────────────────────────────────────────────
             if (rA >= 0)
             {
-                var v = ws.Cell(rA, 13).GetString()?.Trim();
+                var v = ws.Cell(rA, 13).GetString()?.Trim(); // M47
                 if (!string.IsNullOrEmpty(v))
                 {
                     el.Art326 = ParseBool(v);
@@ -1020,7 +1044,7 @@ namespace GlobeMapper.Services
             }
             if (rB >= 0)
             {
-                var v = ws.Cell(rB, 13).GetString()?.Trim();
+                var v = ws.Cell(rB, 13).GetString()?.Trim(); // M175
                 if (!string.IsNullOrEmpty(v))
                 {
                     el.Art461 = ParseBool(v);
@@ -1029,7 +1053,7 @@ namespace GlobeMapper.Services
             }
             if (rC >= 0)
             {
-                var v = ws.Cell(rC, 13).GetString()?.Trim();
+                var v = ws.Cell(rC, 13).GetString()?.Trim(); // M176
                 if (!string.IsNullOrEmpty(v))
                 {
                     el.Art531 = ParseBool(v);
@@ -1038,7 +1062,7 @@ namespace GlobeMapper.Services
             }
             if (rD >= 0)
             {
-                var v = ws.Cell(rD, 13).GetString()?.Trim();
+                var v = ws.Cell(rD, 13).GetString()?.Trim(); // M177
                 if (!string.IsNullOrEmpty(v))
                 {
                     el.Art415 = ParseBool(v);
@@ -1081,11 +1105,11 @@ namespace GlobeMapper.Services
             var rowB321C = FindRow(ws, "(b) 국가별 선택과 관련된 필요정보");
             if (rowB321C >= 0 && el.Art321C != null)
             {
-                var v1 = ws.Cell(rowB321C + 1, 15).GetString()?.Trim();
-                var v2 = ws.Cell(rowB321C + 2, 15).GetString()?.Trim();
-                var v3 = ws.Cell(rowB321C + 3, 15).GetString()?.Trim();
-                var v4 = ws.Cell(rowB321C + 4, 15).GetString()?.Trim();
-                var v5 = ws.Cell(rowB321C + 5, 15).GetString()?.Trim();
+                var v1 = ws.Cell(rowB321C + 1, 15).GetString()?.Trim(); // O190
+                var v2 = ws.Cell(rowB321C + 2, 15).GetString()?.Trim(); // O191
+                var v3 = ws.Cell(rowB321C + 3, 15).GetString()?.Trim(); // O192
+                var v4 = ws.Cell(rowB321C + 4, 15).GetString()?.Trim(); // O193
+                var v5 = ws.Cell(rowB321C + 5, 15).GetString()?.Trim(); // O194
                 if (!string.IsNullOrEmpty(v1))
                     el.Art321C.KEquityInvestmentInclusionElection = v1;
                 if (!string.IsNullOrEmpty(v2))
@@ -1175,7 +1199,8 @@ namespace GlobeMapper.Services
             // (헤더만 있고 실제 입력값 0개여도 위에서 etr.Election 객체는 생성됨)
             if (etr.Election is { } e0)
             {
-                bool elHasAny = e0.Art326Specified
+                bool elHasAny =
+                    e0.Art326Specified
                     || e0.Art415Specified
                     || e0.Art461Specified
                     || e0.Art531Specified
@@ -1186,7 +1211,8 @@ namespace GlobeMapper.Services
                     || e0.NoDefTaxAllocation != null
                     || e0.Art45 != null
                     || e0.Art321C != null;
-                if (!elHasAny) etr.Election = null;
+                if (!elHasAny)
+                    etr.Election = null;
             }
         }
 
@@ -1208,7 +1234,7 @@ namespace GlobeMapper.Services
             bool elected = false;
             if (rowElect >= 0)
             {
-                var v = ws.Cell(rowElect, 15).GetString()?.Trim();
+                var v = ws.Cell(rowElect, 15).GetString()?.Trim(); // O197
                 elected = v == "■" || ParseBool(v);
             }
 
@@ -1283,9 +1309,9 @@ namespace GlobeMapper.Services
             {
                 // +1: 컬럼헤더 행 ("1. 이전 사업연도 조정대상조세 감액" 등) → 스킵
                 // +2: 데이터 행 — B(2)=Reduction, G(7)=IncrementalTopUpTax, M(13)=Ratio
-                reductionRaw = ws.Cell(rowBb + 2, 2).GetString()?.Trim();
-                incrRaw = ws.Cell(rowBb + 2, 7).GetString()?.Trim();
-                ratioRaw = ws.Cell(rowBb + 2, 13).GetString()?.Trim();
+                reductionRaw = ws.Cell(rowBb + 2, 2).GetString()?.Trim(); // B210
+                incrRaw = ws.Cell(rowBb + 2, 7).GetString()?.Trim(); // G210
+                ratioRaw = ws.Cell(rowBb + 2, 13).GetString()?.Trim(); // M210
             }
 
             bool hasData =
@@ -1701,10 +1727,10 @@ namespace GlobeMapper.Services
                 var rExp = FindRow(ws, "3. 조정대상조세 예상액", row3332);
                 var rAdd = FindRow(ws, "4. 당기추가세액가산액", row3332);
 
-                var actRaw = rAct >= 0 ? ws.Cell(rAct, 13).GetString()?.Trim() : null; // M
-                var lossRaw = rLoss >= 0 ? ws.Cell(rLoss, 13).GetString()?.Trim() : null;
-                var expRaw = rExp >= 0 ? ws.Cell(rExp, 13).GetString()?.Trim() : null;
-                var addRaw = rAdd >= 0 ? ws.Cell(rAdd, 13).GetString()?.Trim() : null;
+                var actRaw = rAct >= 0 ? ws.Cell(rAct, 13).GetString()?.Trim() : null; // M (M245)
+                var lossRaw = rLoss >= 0 ? ws.Cell(rLoss, 13).GetString()?.Trim() : null; // M246
+                var expRaw = rExp >= 0 ? ws.Cell(rExp, 13).GetString()?.Trim() : null; // M247
+                var addRaw = rAdd >= 0 ? ws.Cell(rAdd, 13).GetString()?.Trim() : null; // M248
 
                 bool hasArt415 =
                     !string.IsNullOrEmpty(actRaw)
@@ -1750,13 +1776,13 @@ namespace GlobeMapper.Services
             var rSbie = FindRow(ws, "7. 실질기반제외소득 적용가능", rowHdr);
             var rDeMin = FindRow(ws, "8. 최소적용제외 특례", rowHdr);
 
-            var fasRaw = rFas >= 0 ? ws.Cell(rFas, 11).GetString()?.Trim() : null; // K
-            var amtRaw = rAmt >= 0 ? ws.Cell(rAmt, 11).GetString()?.Trim() : null;
-            var rateRaw = rRate >= 0 ? ws.Cell(rRate, 11).GetString()?.Trim() : null;
-            var basisRaw = rBasis >= 0 ? ws.Cell(rBasis, 11).GetString()?.Trim() : null;
-            var curRaw = rCur >= 0 ? ws.Cell(rCur, 11).GetString()?.Trim() : null;
-            var sbieRaw = rSbie >= 0 ? ws.Cell(rSbie, 11).GetString()?.Trim() : null;
-            var deMinRaw = rDeMin >= 0 ? ws.Cell(rDeMin, 11).GetString()?.Trim() : null;
+            var fasRaw = rFas >= 0 ? ws.Cell(rFas, 11).GetString()?.Trim() : null; // K (K251)
+            var amtRaw = rAmt >= 0 ? ws.Cell(rAmt, 11).GetString()?.Trim() : null; // K252
+            var rateRaw = rRate >= 0 ? ws.Cell(rRate, 11).GetString()?.Trim() : null; // K253
+            var basisRaw = rBasis >= 0 ? ws.Cell(rBasis, 11).GetString()?.Trim() : null; // K254
+            var curRaw = rCur >= 0 ? ws.Cell(rCur, 11).GetString()?.Trim() : null; // K255
+            var sbieRaw = rSbie >= 0 ? ws.Cell(rSbie, 11).GetString()?.Trim() : null; // K258
+            var deMinRaw = rDeMin >= 0 ? ws.Cell(rDeMin, 11).GetString()?.Trim() : null; // K259
 
             // CurrencyElection: rCurEl 행 헤더(K=통화라벨, M=선택년도라벨), 데이터는 rCurEl+1
             var rCurElData = rCurEl >= 0 ? rCurEl + 1 : -1;
@@ -1852,10 +1878,10 @@ namespace GlobeMapper.Services
             var r3 = FindRow(ws, "3. 모든 구성기업", rowHdr);
             var r4 = FindRow(ws, "4. B가 A의 50%", rowHdr);
 
-            var totalIntShipRaw = r1 >= 0 ? ws.Cell(r1, 14).GetString()?.Trim() : null;
-            var fiftyCapRaw = r2 >= 0 ? ws.Cell(r2, 14).GetString()?.Trim() : null;
-            var totalQualAncRaw = r3 >= 0 ? ws.Cell(r3, 14).GetString()?.Trim() : null;
-            var excessCapRaw = r4 >= 0 ? ws.Cell(r4, 14).GetString()?.Trim() : null;
+            var totalIntShipRaw = r1 >= 0 ? ws.Cell(r1, 14).GetString()?.Trim() : null; // N214
+            var fiftyCapRaw = r2 >= 0 ? ws.Cell(r2, 14).GetString()?.Trim() : null; // N215
+            var totalQualAncRaw = r3 >= 0 ? ws.Cell(r3, 14).GetString()?.Trim() : null; // N216
+            var excessCapRaw = r4 >= 0 ? ws.Cell(r4, 14).GetString()?.Trim() : null; // N217
 
             bool hasData =
                 !string.IsNullOrEmpty(totalIntShipRaw)

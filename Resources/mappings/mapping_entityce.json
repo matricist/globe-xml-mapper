@@ -1,0 +1,114 @@
+﻿{
+  "description": "구성기업 계산",
+  "sheetName": "구성기업 계산",
+  "sourceFile": "Mapping_EntityCe.cs",
+  "note": "자동 생성 (GenerateMappingDocs). 개발자 참조용 — 실제 로드 안 됨.",
+  "sections": {
+    "3.2.4.2": {
+      "description": "Map3242c",
+      "mappings": [
+        {
+          "cell": "O96",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "2. 이연법인세비용 금액(글로벌최저한세 기준)"
+        },
+        {
+          "cell": "O114",
+          "target": "adj2511.Recast.Lower",
+          "type": "string",
+          "label": "4. 최저한세율보다 낮은 세율로 계상된 이연법인세비용과 최저한세율로 재계산된 이연법인세비용의 차이 금액"
+        },
+        {
+          "cell": "O115",
+          "target": "adj2512.Recast.Higher",
+          "type": "string",
+          "label": "5. 최저한세율보다 높은 세율로 계상된 이연법인세비용과 최저한세율로 재계산된 이연법인세비용의 차이 금액"
+        },
+        {
+          "cell": "O86",
+          "target": "dta.Total",
+          "type": "string",
+          "label": "(p) 총이연법인세조정금액(「국제조세조정에 관한 법률」 제67조제2항부터 제4항까지)"
+        }
+      ]
+    },
+    "3.2.4.1": {
+      "description": "Map3241a",
+      "mappings": [
+        {
+          "cell": "M16",
+          "target": "ceComp.AdjustedFanil.Total",
+          "type": "string",
+          "label": "2. 「국제조세조정에 관한 법률」 제66조제4항부터 제7항까지 및 같은 법 시행령 제107조ㆍ제108조에 따른 배분 후 회계상 순손익"
+        },
+        {
+          "cell": "M44",
+          "target": "ceComp.NetGlobeIncome.Total",
+          "type": "string",
+          "label": "4. 구성기업 또는 공동기업그룹 기업의 글로벌최저한세소득ㆍ결손"
+        }
+      ]
+    },
+    "3.2.4.1 (2)": {
+      "description": "Map3241b",
+      "mappings": [
+        {
+          "cell": "M16",
+          "target": "ceComp.AdjustedFanil.Fanil",
+          "type": "string",
+          "label": "2. 「국제조세조정에 관한 법률」 제66조제4항부터 제7항까지 및 같은 법 시행령 제107조ㆍ제108조에 따른 배분 후 회계상 순손익"
+        }
+      ]
+    },
+    "3.2.4.3": {
+      "description": "Map3243",
+      "mappings": [
+        {
+          "cell": "O120",
+          "target": "el.SimplCalculations",
+          "type": "bool",
+          "label": "2. 매년 선택"
+        },
+        {
+          "cell": "O121",
+          "target": "el.Art321",
+          "type": "bool",
+          "label": "b. 채무면제이익의 제외 선택(「국제조세조정에 관한 법률 시행규칙」 별표 1 제11호)"
+        },
+        {
+          "cell": "O122",
+          "target": "el.KArt447C",
+          "type": "bool",
+          "label": "c. 이연법인세비용 미반영 선택(「국제조세조정에 관한 법률 시행령」 제112조제1항제1호의2나목4))"
+        }
+      ]
+    },
+    "3.4.1": {
+      "description": "Map341",
+      "mappings": [
+        {
+          "cell": "O174",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "2. 적격소득산입규칙을    적용해야 하는 모기업"
+        }
+      ]
+    },
+    "3.4.2": {
+      "description": "Map342",
+      "mappings": [
+        {
+          "cell": "O184",
+          "target": "(inline)",
+          "label": "2.「국제조세조정에 관한 법률」 제73조제3항제2호에 따라 같은 조 제2항의 저율과세구성기업(또는 저율과세 공동기업 또는 공동기업 자회사) 추가세액에서   소득산입규칙 추가세액 납부액을 차감"
+        },
+        {
+          "cell": "O185",
+          "target": "(inline)",
+          "label": "3. 해당 소재지국에 대한 소득산입보완규칙 추가세액 합계"
+        }
+      ]
+    }
+  }
+}

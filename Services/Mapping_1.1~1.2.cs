@@ -56,13 +56,16 @@ namespace GlobeMapper.Services
                                 case "FilingInfo.FilingCe.Name":
                                     var (ceName, ceKName) = ParseNameKName(val);
                                     fi.FilingCe.Name = ceName;
-                                    if (ceKName != null) fi.FilingCe.KName = ceKName;
+                                    if (ceKName != null)
+                                        fi.FilingCe.KName = ceKName;
                                     break;
                                 case "FilingInfo.FilingCe.KName":
                                     fi.FilingCe.KName = val;
                                     break;
                                 case "FilingInfo.FilingCe.Tin.Value":
-                                    fi.FilingCe.Tin = string.IsNullOrWhiteSpace(val) ? NoTin() : ParseTin(val);
+                                    fi.FilingCe.Tin = string.IsNullOrWhiteSpace(val)
+                                        ? NoTin()
+                                        : ParseTin(val);
                                     break;
                                 case "FilingInfo.FilingCe.ResCountryCode":
                                     SetEnum<Globe.CountryCodeType>(
@@ -85,10 +88,14 @@ namespace GlobeMapper.Services
                                 case "FilingInfo.NameMne":
                                     var (mneName, mneKName) = ParseNameKName(val);
                                     fi.NameMne = mneName;
-                                    if (mneKName != null) fi.KNameMne = mneKName;
+                                    if (mneKName != null)
+                                        fi.KNameMne = mneKName;
                                     break;
                                 case "MessageSpec.MessageTypeIndic":
-                                    var indicVal = val == "여" ? "GIR102" : val == "부" ? "GIR101" : val;
+                                    var indicVal =
+                                        val == "여" ? "GIR102"
+                                        : val == "부" ? "GIR101"
+                                        : val;
                                     SetEnum<Globe.MessageTypeIndicEnumType>(
                                         indicVal,
                                         v => globe.MessageSpec.MessageTypeIndic = v,

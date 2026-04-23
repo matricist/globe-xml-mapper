@@ -25,7 +25,7 @@ mapper/
 ├── MainForm.cs                     # 메인 화면 (템플릿 다운로드 / XML 변환)
 ├── TermsDialog.cs
 ├── Services/
-│   ├── ExcelController.cs          # Excel COM 래퍼 (블록 추가/삭제, _META)
+│   ├── TemplateMeta.cs             # 섹션→시트 매핑 + _META 시트 읽기 (정적)
 │   ├── MappingBase.cs              # 공통 유틸 (ParseTin, ParseBool 등)
 │   ├── EntityGroupMap.cs           # "기업매핑" 시트 리더 (entity TIN → 국가/하위그룹)
 │   ├── Mapping_1.1~1.2.cs
@@ -44,7 +44,9 @@ mapper/
 ├── Resources/
 │   ├── Globe.cs / Globe요약.md     # XSD 생성 클래스 + 요약
 │   ├── XSD/
-│   ├── mappings/                   # 섹션별 매핑 JSON
+│   ├── mappings/                   # 매핑 JSON
+│   │                               # - mapping_1.1~1.2.json: 실제 로드 (MappingBase.Sections 사용)
+│   │                               # - 나머지: 개발자 참조용 (Tools/GenerateMappingDocs 로 재생성)
 │   ├── main_template.xlsx          # 단일 통합 템플릿
 │   ├── terms.txt / expired_message.txt / activation_config.json
 │   └── GIR_XML_에러코드_매뉴얼.md
@@ -53,13 +55,10 @@ mapper/
 
 ## 핵심 클래스
 
-### ExcelController (Services/ExcelController.cs)
-- `Open(path)` / `AttachToActive()` / `CreateNew(template, savePath)` — Excel 연결
-- `AddRowBlock` / `RemoveRowBlock` / `GetRowBlockCount` — 헤더 키워드 기반 블록 추가/삭제
-- `AddCeBlock` / `RemoveCeBlock` / `ResetCeSheet` / `GetCeBlockCount` — 그룹구조 CE 블록
-- `AddSheet2Block` / `RemoveSheet2Block` / `ResetSheet2` — 적용면제 52행 복합 블록
-- `GetFilePathForMapping()` — 저장 후 파일 경로 반환 (ClosedXML용)
-- `CloseWithSavePrompt()` — 저장 확인 후 종료
+### TemplateMeta (Services/TemplateMeta.cs)
+- `SheetMap` — (섹션키, 시트명) 처리 순서 배열 (JurCal이 EntityCe보다 먼저 — JurisdictionSection 선행 생성 보장)
+- `MetaSheetName` — `_META` 상수
+- `ReadBlockCount(metaWs, sheetName)` — `blockCount:{시트명}` 키 조회 (없으면 1)
 
 ### MappingOrchestrator
 - `MapWorkbook(filePath, globe)` — 단일 main_template.xlsx 기반 매핑 (폴더/group/entity 개념 없음)
@@ -71,8 +70,7 @@ mapper/
 - 값 열(column)도 실제 템플릿 덤프로 확인 — O열(15)이 아닌 N열(14) 등 다를 수 있음
 
 ### CE 행 블록 반복 (그룹구조 시트)
-- 그룹구조 시트에서 3~21행이 CE 1건 블록 (19행). [+]로 블록 복제
-- ExcelController 상수: CE_BLOCK_START=3, CE_BLOCK_END=21, CE_BLOCK_GAP=2
+- 그룹구조 시트에서 3~21행이 CE 1건 블록 (19행), 블록 간 2행 간격
 - 소유지분은 블록 내 O11 통합 셀(offset 8, 병합 O11:R14)에 인라인 입력 — 별첨 시트 없음
   - 포맷: `유형,TIN,TIN유형,발급국가,지분` × N (주주 구분: `;`)
   - 예: `GIR801, 1234567890, GIR3001, KR, 1; GIR802, 987, GIR3001, KR, 0.5`
@@ -93,10 +91,9 @@ mapper/
 ## 새 섹션 추가 절차
 1. 매퍼 클래스: `Services/Mapping_{섹션}.cs` (MappingBase 상속)
 2. `MappingOrchestrator.MapperFactory`에 등록
-3. `ExcelController.SheetMap`에 (section, sheetName) 추가
-4. `ControlPanelForm.UpdateDynamicPanel`에 시트 분기 추가 (블록 +/- 버튼)
-5. `ValidationUtil`에 검증 규칙 추가
-6. CLAUDE.md 업데이트
+3. `TemplateMeta.SheetMap`에 (section, sheetName) 추가
+4. `ValidationUtil`에 검증 규칙 추가
+5. CLAUDE.md 업데이트
 
 ## 구현 진행 상황 (main_template.xlsx 시트별)
 
