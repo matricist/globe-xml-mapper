@@ -14,11 +14,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="Tools\**" />
-    <None Remove="Tools\**" />
-  </ItemGroup>
-
-  <ItemGroup>
     <None Update="Resources\terms.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

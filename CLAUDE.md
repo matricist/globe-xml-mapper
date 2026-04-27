@@ -38,18 +38,15 @@ mapper/
 │   ├── MappingOrchestrator.cs      # 섹션 순회 + MessageSpec/DocSpec 채움
 │   ├── ValidationUtil.cs
 │   └── XmlExportService.cs
-├── Resources/
-│   ├── Globe.cs / Globe요약.md     # XSD 생성 클래스 + 요약
-│   ├── XSD/
-│   ├── mappings/                   # 매핑 JSON
-│   │                               # - mapping_1.1~1.2.json: 실제 로드 (MappingBase.Sections 사용)
-│   │                               # - 나머지: 개발자 참조용 (Tools/GenerateMappingDocs 로 재생성)
-│   ├── main_template_newest.xlsx      # 단일 통합 템플릿
-│   ├── terms.txt / expired_message.txt / activation_config.json
-│   └── GIR_XML_에러코드_매뉴얼.md
-└── Tools/                          # 콘솔 도구 (빌드 제외)
-    ├── E2EValidate/                # xlsx → XML + XSD 검증 한방
-    └── GenerateMappingDocs/        # Resources/mappings/*.json 갱신
+└── Resources/
+    ├── Globe.cs / Globe요약.md     # XSD 생성 클래스 + 요약
+    ├── XSD/
+    ├── mappings/                   # 매핑 JSON
+    │                               # - mapping_1.1~1.2.json: 실제 로드 (MappingBase.Sections 사용)
+    │                               # - 나머지: 개발자 참조용 (수동 유지)
+    ├── main_template_newest.xlsx   # 단일 통합 템플릿
+    ├── terms.txt / expired_message.txt / activation_config.json
+    └── GIR_XML_에러코드_매뉴얼.md
 ```
 
 ## 핵심 클래스
